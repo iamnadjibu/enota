@@ -62,9 +62,9 @@ export default function Home() {
             transition={{ delay: 0.4 }}
             className="flex flex-col sm:flex-row items-center gap-6"
           >
-            <button className="btn-primary flex items-center gap-2 px-8 py-4 text-lg">
+            <Link to="/marks" className="btn-primary flex items-center gap-2 px-8 py-4 text-lg">
               Get Started <ArrowRight size={20} />
-            </button>
+            </Link>
             <button className="flex items-center gap-3 text-white/80 hover:text-white transition-colors group">
               <span className="w-12 h-12 rounded-full glass flex items-center justify-center group-hover:bg-white/10 transition-colors">
                 <Play size={20} className="fill-white" />

@@ -117,6 +117,11 @@ export default function PublicLayout({ children }) {
                     </a>
                   </li>
                 ))}
+                <li>
+                  <a href="/admin" className="text-sm text-accent hover:underline font-bold transition-colors uppercase tracking-widest">
+                    Admin Portal
+                  </a>
+                </li>
               </ul>
             </div>
             <div>

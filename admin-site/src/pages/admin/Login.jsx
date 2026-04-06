@@ -111,14 +111,14 @@ export default function Login() {
           </button>
 
           <p className="text-center text-xs text-white/30 mt-8">
-            Don't have an admin account? <Link to="/admin/register" className="text-accent underline">Apply here</Link>
+            Don't have an admin account? <Link to="/register" className="text-accent underline font-bold uppercase tracking-widest">Apply here</Link>
           </p>
         </form>
       </motion.div>
 
-      <Link to="/" className="mt-8 text-white/30 hover:text-white transition-colors text-xs uppercase tracking-widest font-bold">
+      <a href="/" className="mt-8 text-white/30 hover:text-white transition-colors text-xs uppercase tracking-widest font-bold">
         ← Back to Public Site
-      </Link>
+      </a>
     </div>
   )
 }

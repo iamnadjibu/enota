@@ -22,16 +22,16 @@ export default function AdminLayout() {
   const navigate = useNavigate()
 
   const navItems = [
-    { name: 'Dashboard', path: '/admin/dashboard', icon: <LayoutDashboard size={20} /> },
-    { name: 'Marks Manager', path: '/admin/marks', icon: <GraduationCap size={20} /> },
-    { name: 'Admin Manager', path: '/admin/admins', icon: <Users size={20} />, masterOnly: true },
-    { name: 'Site Content', path: '/admin/content', icon: <Settings size={20} />, masterOnly: true },
+    { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={20} /> },
+    { name: 'Marks Manager', path: '/marks', icon: <GraduationCap size={20} /> },
+    { name: 'Admin Manager', path: '/admins', icon: <Users size={20} />, masterOnly: true },
+    { name: 'Site Content', path: '/content', icon: <Settings size={20} />, masterOnly: true },
   ]
 
   const handleLogout = async () => {
     try {
       await logout()
-      navigate('/admin/login')
+      navigate('/login')
     } catch (error) {
       console.error(error)
     }

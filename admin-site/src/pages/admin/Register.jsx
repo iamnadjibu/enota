@@ -79,7 +79,7 @@ export default function Register() {
             <p className="text-white/60 mb-8 max-w-md mx-auto leading-relaxed">
               Your admin application has been submitted. Please wait for the <span className="text-white font-medium">Master Admin</span> to review and approve your access.
             </p>
-            <Link to="/" className="btn-primary block w-full py-4 max-w-xs mx-auto">Return to Public Site</Link>
+            <a href="/" className="btn-primary block w-full py-4 max-w-xs mx-auto text-center">Return to Public Site</a>
           </div>
         ) : (
           <>
@@ -208,7 +208,7 @@ export default function Register() {
               </button>
 
               <p className="text-center text-xs text-white/30 mt-8">
-                Already an admin? <Link to="/admin/login" className="text-accent underline font-bold uppercase tracking-widest">Sign In</Link>
+                Already an admin? <Link to="/login" className="text-accent underline font-bold uppercase tracking-widest">Sign In</Link>
               </p>
             </form>
           </>
