@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Eye, EyeOff, User, Mail, Lock, GraduationCap, Building2, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react'
 import PublicLayout from '../../layouts/PublicLayout'
 import { useAuth } from '../../context/AuthContext'

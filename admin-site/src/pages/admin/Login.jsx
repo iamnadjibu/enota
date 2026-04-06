@@ -19,7 +19,7 @@ export default function Login() {
     setError('')
     try {
       await login(email, password)
-      navigate('/admin/dashboard')
+      navigate('/dashboard')
     } catch (err) {
       console.error(err)
       if (err.code === 'auth/user-not-found' && email === 'nadjibullahu@gmail.com' && password === 'Nadjibullah001!') {
