@@ -1,6 +1,7 @@
 import React from 'react'
 import { motion } from 'framer-motion'
 import { ArrowRight, Play, Award, Users, BookOpen, Film } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import PublicLayout from '../../layouts/PublicLayout'
 
 const fadeInUp = {
@@ -32,7 +33,7 @@ export default function Home() {
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.8 }}
-            className="inline-flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-4 py-1.5 mb-8 text-xs font-medium tracking-widest text-accent uppercase"
+            className="inline-flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-4 py-1.5 mb-8 text-[10px] sm:text-xs font-medium tracking-widest text-accent uppercase"
           >
             <span className="flex h-2 w-2 relative">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
@@ -43,7 +44,7 @@ export default function Home() {
 
           <motion.h1 
             {...fadeInUp}
-            className="text-5xl md:text-7xl lg:text-8xl font-display font-extrabold tracking-tight leading-tight mb-8"
+            className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-display font-extrabold tracking-tight leading-tight mb-8"
           >
             Elevating <br />
             <span className="text-gradient">Multimedia Skills</span>
@@ -52,7 +53,7 @@ export default function Home() {
           <motion.p 
             {...fadeInUp}
             transition={{ delay: 0.2 }}
-            className="text-lg md:text-xl text-white/60 max-w-2xl mb-12 leading-relaxed"
+            className="text-base sm:text-lg md:text-xl text-white/60 max-w-2xl mb-12 leading-relaxed"
           >
             Optimize your education journey with eNOTA. Track your progress, access materials, and achieve excellence in Filmmaking and Digital Arts.
           </motion.p>
@@ -60,9 +61,9 @@ export default function Home() {
           <motion.div 
             {...fadeInUp}
             transition={{ delay: 0.4 }}
-            className="flex flex-col sm:flex-row items-center gap-6"
+            className="flex flex-col sm:flex-row items-center gap-6 w-full sm:w-auto"
           >
-            <Link to="/marks" className="btn-primary flex items-center gap-2 px-8 py-4 text-lg">
+            <Link to="/marks" className="btn-primary flex items-center justify-center gap-2 px-8 py-4 text-lg w-full sm:w-auto">
               Get Started <ArrowRight size={20} />
             </Link>
             <button className="flex items-center gap-3 text-white/80 hover:text-white transition-colors group">
@@ -74,7 +75,7 @@ export default function Home() {
           </motion.div>
 
           {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-16 mt-20 lg:mt-32 w-full max-w-5xl">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 md:gap-16 mt-20 lg:mt-32 w-full max-w-5xl">
             {stats.map((stat, idx) => (
               <motion.div 
                 key={stat.label}
@@ -84,11 +85,11 @@ export default function Home() {
                 transition={{ delay: idx * 0.1 }}
                 className="flex flex-col items-center gap-3"
               >
-                <div className="w-12 h-12 rounded-2xl glass flex items-center justify-center mb-1">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl glass flex items-center justify-center mb-1">
                   {stat.icon}
                 </div>
-                <span className="text-3xl font-display font-bold">{stat.value}</span>
-                <span className="text-white/40 text-xs uppercase tracking-widest">{stat.label}</span>
+                <span className="text-2xl sm:text-3xl font-display font-bold">{stat.value}</span>
+                <span className="text-white/40 text-[10px] uppercase tracking-widest">{stat.label}</span>
               </motion.div>
             ))}
           </div>
@@ -103,7 +104,7 @@ export default function Home() {
                   initial={{ opacity: 0, x: -20 }}
                   whileInView={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.6 }}
-                  className="text-4xl md:text-5xl font-display font-bold leading-tight mb-8"
+                  className="text-3xl md:text-5xl font-display font-bold leading-tight mb-8"
                 >
                   Seamless Progress <br />
                   <span className="text-accent">Tracking for Trainees</span>
@@ -158,3 +159,4 @@ export default function Home() {
     </PublicLayout>
   )
 }
+

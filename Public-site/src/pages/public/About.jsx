@@ -1,6 +1,7 @@
 import React from 'react'
 import { motion } from 'framer-motion'
 import { Award, Target, Users, Zap, CheckCircle2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import PublicLayout from '../../layouts/PublicLayout'
 
 const fadeInUp = {
@@ -53,11 +54,11 @@ export default function About() {
             <div className="grid sm:grid-cols-2 gap-6">
               {services.map((service, idx) => (
                 <motion.div 
-                  key={service.title}
-                  {...fadeInUp}
-                  transition={{ delay: idx * 0.1 }}
-                  className="p-6 glass rounded-2xl border border-white/5 hover:border-accent/30 transition-all group"
-                >
+                   key={service.title}
+                   {...fadeInUp}
+                   transition={{ delay: idx * 0.1 }}
+                   className="p-6 glass rounded-2xl border border-white/5 hover:border-accent/30 transition-all group"
+                 >
                   <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center text-accent mb-4 group-hover:bg-accent group-hover:text-background transition-colors">
                     <CheckCircle2 size={20} />
                   </div>
@@ -83,9 +84,10 @@ export default function About() {
           <p className="text-white/60 max-w-2xl mx-auto mb-12 relative z-10">
             Our team brings a wealth of passion, technical proficiency, and creative ingenuity to every single project we undertake. Whether you are a startup or an established brand, we are here to elevate you.
           </p>
-          <button className="btn-primary relative z-10 px-12 py-4">Explore Our Works</button>
+          <Link to="/materials" className="btn-primary relative z-10 px-12 py-4 inline-block">Explore Our Works</Link>
         </motion.div>
       </div>
     </PublicLayout>
   )
 }
+
