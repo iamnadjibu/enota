@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Function to check if user is the Master Admin
+    function isMaster() {
+      return isAuthenticated() && request.auth.token.email == "nadjibullahu@gmail.com";
+    }
+
+    // Function to check if user is an approved Admin
+    function isAdmin() {
+      return isAuthenticated() && (
+        isMaster() || 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin" &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == "active"
+      );
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if true; // Allow registraton
+      allow update: if isMaster() || request.auth.uid == userId;
+      allow delete: if isMaster();
+    }
+
+    // Marks Collection
+    match /marks/{markId} {
+      allow read: if true; // Allows students to search by Reg Number without login
+      allow write: if isAdmin();
+    }
+
+    // Settings Collection
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isMaster();
+    }
+  }
+}

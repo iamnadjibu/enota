@@ -1,0 +1,422 @@
+import React, { useEffect, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { 
+  Users, 
+  Search, 
+  Plus, 
+  Edit2, 
+  Trash2, 
+  Download, 
+  FileSpreadsheet, 
+  AlertCircle,
+  X,
+  Save,
+  CheckCircle,
+  Database
+} from 'lucide-react'
+import { collection, query, onSnapshot, doc, updateDoc, deleteDoc, addDoc, where, getDocs, writeBatch } from 'firebase/firestore'
+import { db } from '../../firebase'
+import { useAuth } from '../../context/AuthContext'
+
+export default function MarksManager() {
+  const { isMaster, userData } = useAuth()
+  const [marks, setMarks] = useState([])
+  const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [selectedMark, setSelectedMark] = useState(null)
+  const [isSeeding, setIsSeeding] = useState(false)
+
+  // Form State
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    regNumber: '',
+    faculty: '',
+    institution: '',
+    gender: 'Male',
+    filmmakingMarks: 0,
+    cameraOperationMarks: 0,
+    videoEditingMarks: 0
+  })
+
+  useEffect(() => {
+    const marksRef = collection(db, 'marks')
+    let q = marksRef
+    
+    // If not master, filter by faculty
+    if (!isMaster && userData?.faculty && userData.faculty !== 'N/A') {
+      q = query(marksRef, where('faculty', '==', userData.faculty))
+    }
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const markList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      setMarks(markList)
+      setLoading(false)
+    })
+
+    return unsubscribe
+  }, [isMaster, userData?.faculty])
+
+  const calculateGrade = (m) => {
+    if (m === 'N/A' || m === 0 || m === '0' || !m) return 'F'
+    const marks = parseFloat(m)
+    if (marks >= 90) return 'A+'
+    if (marks >= 80) return 'A'
+    if (marks >= 75) return 'B+'
+    if (marks >= 70) return 'B'
+    if (marks >= 65) return 'C+'
+    if (marks >= 60) return 'C'
+    if (marks >= 55) return 'D'
+    if (marks >= 50) return 'E'
+    return 'F'
+  }
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+
+    const avg = ((parseFloat(formData.filmmakingMarks) + parseFloat(formData.cameraOperationMarks) + parseFloat(formData.videoEditingMarks)) / 3).toFixed(2)
+    const overallGrade = calculateGrade(avg)
+    
+    const finalData = {
+      ...formData,
+      averageMarks: avg,
+      overallGrade,
+      gradeFilmmaking: calculateGrade(formData.filmmakingMarks),
+      gradeCameraOperation: calculateGrade(formData.cameraOperationMarks),
+      gradeVideoEditing: calculateGrade(formData.videoEditingMarks),
+      updatedAt: new Date().toISOString()
+    }
+
+    try {
+      if (selectedMark) {
+        await updateDoc(doc(db, 'marks', selectedMark.id), finalData)
+      } else {
+        await addDoc(collection(db, 'marks'), { ...finalData, createdAt: new Date().toISOString() })
+      }
+      setIsModalOpen(false)
+      setSelectedMark(null)
+      setFormData({
+        firstName: '', lastName: '', regNumber: '', faculty: userData?.faculty || '', 
+        institution: userData?.institution || '', gender: 'Male',
+        filmmakingMarks: 0, cameraOperationMarks: 0, videoEditingMarks: 0
+      })
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (window.confirm('Delete this record?')) {
+      try {
+        await deleteDoc(doc(db, 'marks', id))
+      } catch (err) {
+        console.error(err)
+      }
+    }
+  }
+
+  const seedInitialData = async () => {
+    if (!window.confirm('This will seed the initial student marks. Continue?')) return
+    setIsSeeding(true)
+    try {
+      const csvData = [
+        ["DORA SHOLAMI","MWAMIKAZI","KSP0103999","N/A",54,"E",73,"B",95,"A+",74.00,"B"],
+        ["MARIE ASSOUMPTA","UWAMAHORO","KSP0103023","N/A",90,"A+",97,"A+",94,"A+",93.67,"A+"],
+        ["LEATITIA","NIYOMUBYEYI","KSP0103942","MULTIMEDIA PRODUCTION",71,"B",93,"A+",60,"C",74.67,"B"],
+        ["REHEMA","IKIREZI","KSP0103929","MULTIMEDIA PRODUCTION",52,"E",78,"B+",71,"B",67.00,"C+"],
+        ["JEAN D'AMOUR","BYIRINGIRO","KSP0103955","MULTIMEDIA PRODUCTION",50,"E",76,"B+",44,"F",56.67,"D"],
+        ["ALBERT","DUSHIMIMANA","KSP0101952","FILMMAKING AND VIDEO PRODUCTION",3,"F",74,"B",46,"F",41.00,"F"],
+        ["JEAN CHRISOSTOME","TUMWESIGE","KSP0101998","FILMMAKING AND VIDEO PRODUCTION",51,"E",74,"B",80,"A",68.33,"C+"],
+        ["ALAIN CRISPIN","HIRWA","KSP0101953","FILMMAKING AND VIDEO PRODUCTION",14,"F",61,"C",62,"C",45.67,"F"],
+        ["MUS'AB","RUGAMBA","KSP01013010","N/A",95,"A+",96,"A+",99,"A+",96.67,"A+"],
+        ["EDMOND","SHEMA","KSP0103918","N/A",60,"C",98,"A+",57,"D",71.67,"B"],
+        ["PASCAL","TUYIZERE","KSP01031003","N/A",71,"B",81,"A",74,"B",75.33,"B+"],
+        ["MICHAEL","KAMANZI","KSP01031011","N/A",61,"C",75,"B+",94,"A+",76.67,"B+"],
+        ["ALIANE","ISIMBI","KSP010301140","N/A",70,"B",73,"B",96,"A+",79.67,"B+"],
+        ["ERIC","MATSIKO","KSP010301234","N/A",27,"F",31,"F",37,"F",31.67,"F"],
+        ["NELLY","MUGWANEZA","KSP010301151","N/A",71,"B",23,"F",92,"A+",62.00,"C"],
+        ["CLEMENTINE","NYIRAHABIMANA","KSP010301257","N/A",65,"C+",0,"F",71,"B",45.33,"F"],
+        ["PATRICK","ITANGISHAKA","KSP010301313","N/A",44,"F",0,"F",67,"C+",37.00,"F"],
+        ["DONAT","SIKWIREBA","KSP010101133","N/A",28,"F",41,"F",71,"B",46.67,"F"],
+        ["CHRISTELLAH","UMURERWA","KSP010301207","N/A",83,"A",70,"B",93,"A+",82.00,"A"],
+        ["JEAN GENTILLE","DUSHIMEYEZU","KSP010301163","N/A",0,"F",74,"B",89,"A",54.33,"E"],
+        ["GAD DAVID","FARADJA","KSP010301167","N/A",80,"A",88,"A",83,"A",83.67,"A"],
+        ["GRACE","UWERA","KSP01031024","N/A",70,"B",96,"A+",98,"A+",88.00,"A"],
+        ["PACIFIQUE","KAYITARE","KSP01031045","N/A",98,"A+",96,"A+",98,"A+",97.33,"A+"],
+        ["JEAN YVES","HARORIMANA","N/A","MULTIMEDIA PRODUCTION",84.17,"A",92,"A+",88.65,"A",88.27,"A"],
+        ["SANO AURORE","ISIMBI","KSP0101898","FILMMAKING AND VIDEO PRODUCTION",76.77,"B+",82.47,"A",86.5,"A",81.91,"A"],
+        ["UWASE SQUELY KESSY","MUSIRUKA","N/A","N/A",77.33,"B+",65,"C+",79,"B+",73.78,"B"],
+        ["CEDRIC","ISHIMWE","N/A","N/A",61.67,"C",37.75,"F",68,"C+",55.81,"D"],
+        ["LOIC","NTIRANDEKURA","N/A","N/A",42.67,"F",57.7,"D",36,"F",45.46,"F"],
+        ["IDRISSA","BAYIZERE","N/A","N/A",43.67,"F",0,"F",68,"C+",37.22,"F"],
+        ["ROSINE","NZAKIZWANIMANA","N/A","N/A",0,"F",0,"F",82,"A",27.33,"F"],
+        ["THEONESTE","SEBERA","N/A","N/A",0,"F",0,"F",82,"A",27.33,"F"],
+        ["KENNY BLAISE","RUGAMBA","N/A","N/A",30.67,"F",43.1,"F",7,"F",26.92,"F"],
+        ["DJAMUHULI","MUKIZA","KSP0103882","MULTIMEDIA PRODUCTION",74.5,"B",81,"A",79.5,"B+",78.33,"B+"],
+        ["ALEX","GASANA","N/A","N/A",0,"F",0,"F",78,"B+",26.00,"F"],
+        ["ANASTASE","NTEZIRYAYO","N/A","N/A",0,"F",0,"F",60,"C",20.00,"F"],
+        ["GAD","TUYISENGE","KSP0101944","FILMMAKING AND VIDEO PRODUCTION",90.5,"A+",99,"A+",91,"A+",93.50,"A+"],
+        ["UZARAMA JEAN CLAUDE","MUVUNYI","KSP0103939","MULTIMEDIA PRODUCTION",0,"F",0,"F",0,"F",0.00,"F"],
+        ["WELLARS","GAKIRE","KSP01019445","FILMMAKING AND VIDEO PRODUCTION",62,"C",85,"A",78.5,"B+",75.17,"B+"],
+        ["SAMUEL","GAKUBA","KSP0103938","MULTIMEDIA PRODUCTION",51,"E",88,"A",48.5,"F",62.50,"C"],
+        ["JEANNE","UWIMBABAZI","KSP0101943","FILMMAKING AND VIDEO PRODUCTION",67,"C+",88,"A",85,"A",80.00,"A"],
+        ["SHEMA ALLIANCE","HABIYAREMYE","KSP 0103919","MULTIMEDIA PRODUCTION",92,"A+",90,"A+",70,"B",84.00,"B+"],
+        ["ARCHANGE","MBABAZI","KSP0101951","FILMMAKING AND VIDEO PRODUCTION",73,"B",66,"C+",66,"C+",68.33,"C+"],
+        ["CHANCELINE","UWIMANA","KSP0103937","MULTIMEDIA PRODUCTION",71,"B",89,"A",88.5,"A",82.83,"A"],
+        ["MUGABO REMY","KWIZERA","KSP0103924","MULTIMEDIA PRODUCTION",71,"B",97,"A+",82.5,"A",83.50,"A"],
+        ["STEVEN","MUHIZI","N/A","FILMMAKING AND VIDEO PRODUCTION",62,"C",0,"F",0,"F",20.67,"F"],
+        ["PATRICK","KAYITARE","N/A","FILMMAKING AND VIDEO PRODUCTION",43,"F",0,"F",0,"F",14.33,"F"],
+        ["JOSELYNE","NIKUZE","N/A","FILMMAKING AND VIDEO PRODUCTION",96,"A+",0,"F",0,"F",32.00,"F"],
+        ["CHARLES","TUYISENGE","KSP0101963","FILMMAKING AND VIDEO PRODUCTION",70,"B",75,"B+",54,"E",66.33,"C+"],
+        ["BRUCE","MANZI","KSP0103960","MULTIMEDIA PRODUCTION",56,"D",80,"A",0,"F",45.33,"F"],
+        ["EMMANUEL","ABAYEZU","KSP0/03974","MULTIMEDIA PRODUCTION",0,"F",72,"B",0,"F",24.00,"F"],
+        ["CHARLES LWANGA","NIYORUGIRA","KSP0103958","MULTIMEDIA PRODUCTION",72,"B",78,"B+",66.5,"C+",72.17,"B"],
+        ["THIERRY","IRADUKUNDA","KSP0101946","MULTIMEDIA PRODUCTION",93,"A+",90,"A+",95.5,"A+",92.83,"A+"],
+        ["JACQUELINE","UWERA","KSP0103957","MULTIMEDIA PRODUCTION",80,"A",93,"A+",50.5,"E",74.50,"B"],
+        ["SIMPLICE","KWIZERA","KSP0103961","MULTIMEDIA PRODUCTION",0,"F",73,"B",82.5,"A",51.83,"E"],
+        ["EMMANUEL","ISHIMWE","KSP0103959","MULTIMEDIA PRODUCTION",74,"B",0,"F",64,"C",46.00,"F"],
+        ["EVIDENCE","MUGISHA","KSP0103925","MULTIMEDIA PRODUCTION",41,"F",81,"A",63,"C",61.67,"C"],
+        ["ALLAN CHRISTOPHER","TABAARA","KSP0101983","FILMMAKING AND VIDEO PRODUCTION",68,"C+",78,"B+",86,"A",77.33,"B+"]
+      ]
+
+      const batch = writeBatch(db)
+      csvData.forEach(row => {
+        const docRef = doc(collection(db, 'marks'))
+        batch.set(docRef, {
+          firstName: row[0],
+          lastName: row[1],
+          regNumber: row[2],
+          faculty: row[3],
+          filmmakingMarks: row[4],
+          gradeFilmmaking: row[5],
+          cameraOperationMarks: row[6],
+          gradeCameraOperation: row[7],
+          videoEditingMarks: row[8],
+          gradeVideoEditing: row[9],
+          averageMarks: row[10],
+          overallGrade: row[11],
+          institution: 'NAD CLASS', // Default for seed
+          gender: 'Male', // Default for seed
+          createdAt: new Date().toISOString()
+        })
+      })
+      await batch.commit()
+      alert('Data seeded successfully!')
+    } catch (err) {
+      console.error(err)
+      alert('Seeding failed.')
+    } finally {
+      setIsSeeding(false)
+    }
+  }
+
+  const filteredMarks = marks.filter(mark => 
+    mark.firstName?.toLowerCase().includes(search.toLowerCase()) || 
+    mark.lastName?.toLowerCase().includes(search.toLowerCase()) ||
+    mark.regNumber?.toLowerCase().includes(search.toLowerCase())
+  )
+
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h1 className="text-3xl font-display font-bold">Marks <span className="text-accent">Manager</span></h1>
+          <p className="text-white/40 text-sm mt-1">Manage and update student records and performance marks.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {isMaster && (
+             <button 
+              onClick={seedInitialData}
+              disabled={isSeeding}
+              className="btn-outline flex items-center gap-2 border-accent/20 text-accent hover:bg-accent/10"
+             >
+               <Database size={16} /> {isSeeding ? 'Seeding...' : 'Seed Data'}
+             </button>
+          )}
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus size={18} /> Add Student
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="relative max-w-md w-full">
+           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
+           <input 
+            type="text" 
+            placeholder="Search by name or reg number..." 
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-sm focus:outline-none focus:border-accent/50 transition-colors"
+           />
+        </div>
+        <div className="text-xs text-white/40 font-bold uppercase tracking-widest">
+           Showing {filteredMarks.length} Records
+        </div>
+      </div>
+
+      <div className="glass rounded-[40px] border border-white/5 overflow-hidden">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-white/5 border-b border-white/5 text-left">
+              <th className="p-6 text-xs font-bold uppercase tracking-widest text-white/40">Student</th>
+              <th className="p-6 text-xs font-bold uppercase tracking-widest text-white/40">Faculty</th>
+              <th className="p-6 text-xs font-bold uppercase tracking-widest text-white/40 text-center">Avg %</th>
+              <th className="p-6 text-xs font-bold uppercase tracking-widest text-white/40 text-center">Grade</th>
+              <th className="p-6 text-xs font-bold uppercase tracking-widest text-white/40 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredMarks.map((mark) => (
+              <tr key={mark.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                <td className="p-6">
+                  <div>
+                    <p className="font-bold">{mark.firstName} {mark.lastName}</p>
+                    <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{mark.regNumber}</p>
+                  </div>
+                </td>
+                <td className="p-6">
+                  <p className="text-xs text-white/60">{mark.faculty}</p>
+                </td>
+                <td className="p-6 text-center">
+                  <p className="font-bold text-accent">{mark.averageMarks}%</p>
+                </td>
+                <td className="p-6 text-center">
+                  <span className="px-3 py-1 rounded-lg bg-primary/10 text-primary-light font-bold text-xs">{mark.overallGrade}</span>
+                </td>
+                <td className="p-6">
+                  <div className="flex items-center justify-end gap-2">
+                    <button 
+                      onClick={() => {
+                        setSelectedMark(mark)
+                        setFormData(mark)
+                        setIsModalOpen(true)
+                      }}
+                      className="p-2 hover:bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(mark.id)}
+                      className="p-2 hover:bg-white/5 rounded-lg text-red-500/40 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Add/Edit Modal */}
+      <AnimatePresence>
+        {isModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsModalOpen(false)}
+              className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+            ></motion.div>
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-2xl glass p-10 rounded-[40px] border border-white/5 shadow-2xl overflow-y-auto max-h-[90vh]"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <h3 className="text-2xl font-display font-bold">{selectedMark ? 'Edit' : 'Add'} Student Mark</h3>
+                <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-white/5 rounded-full"><X size={24}/></button>
+              </div>
+
+              <form onSubmit={handleSave} className="space-y-6">
+                <div className="grid sm:grid-cols-2 gap-6">
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">First Name</label>
+                     <input 
+                      type="text" required 
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm"
+                      value={formData.firstName} onChange={(e) => setFormData({...formData, firstName: e.target.value})}
+                     />
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Last Name</label>
+                     <input 
+                      type="text" required 
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm"
+                      value={formData.lastName} onChange={(e) => setFormData({...formData, lastName: e.target.value})}
+                     />
+                   </div>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-6">
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Reg Number</label>
+                     <input 
+                      type="text" required 
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm"
+                      value={formData.regNumber} onChange={(e) => setFormData({...formData, regNumber: e.target.value})}
+                     />
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Faculty</label>
+                     <input 
+                      type="text" required 
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm"
+                      value={formData.faculty} onChange={(e) => setFormData({...formData, faculty: e.target.value})}
+                     />
+                   </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-6 pt-6 border-t border-white/5">
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Filmmaking</label>
+                     <input 
+                      type="number" required min="0" max="100"
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-center font-bold text-accent"
+                      value={formData.filmmakingMarks} onChange={(e) => setFormData({...formData, filmmakingMarks: e.target.value})}
+                     />
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Camera Op</label>
+                     <input 
+                      type="number" required min="0" max="100"
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-center font-bold text-accent"
+                      value={formData.cameraOperationMarks} onChange={(e) => setFormData({...formData, cameraOperationMarks: e.target.value})}
+                     />
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Video Editing</label>
+                     <input 
+                      type="number" required min="0" max="100"
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-center font-bold text-accent"
+                      value={formData.videoEditingMarks} onChange={(e) => setFormData({...formData, videoEditingMarks: e.target.value})}
+                     />
+                   </div>
+                </div>
+
+                <button 
+                  type="submit" 
+                  disabled={loading}
+                  className="btn-primary w-full py-4 text-sm font-bold flex items-center justify-center gap-2 mt-8"
+                >
+                  <Save size={18} /> {selectedMark ? 'Update Record' : 'Save New Record'}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
