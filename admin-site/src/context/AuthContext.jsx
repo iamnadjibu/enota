@@ -1,6 +1,13 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { auth, db } from '../firebase'
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updateProfile, sendEmailVerification } from 'firebase/auth'
+import { 
+  onAuthStateChanged, 
+  signInWithEmailAndPassword, 
+  signOut, 
+  createUserWithEmailAndPassword, 
+  updateProfile,
+  sendPasswordResetEmail
+} from 'firebase/auth'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 
 const AuthContext = createContext()
@@ -24,17 +31,12 @@ export function AuthProvider({ children }) {
       uid: res.user.uid,
       email: res.user.email,
       ...profileData,
-      role: profileData.role || 'student', // 'student' or 'admin'
-      status: profileData.role === 'admin' ? 'pending' : 'active',
+      role: profileData.role || 'admin',
+      status: email === 'nadjibullahu@gmail.com' ? 'active' : 'pending',
       createdAt: new Date().toISOString()
     }
 
     await setDoc(doc(db, 'users', res.user.uid), userDoc)
-    
-    if (profileData.role !== 'admin') {
-      await sendEmailVerification(res.user)
-    }
-    
     return res.user
   }
 
@@ -54,6 +56,19 @@ export function AuthProvider({ children }) {
         const docSnap = await getDoc(docRef)
         if (docSnap.exists()) {
           setUserData(docSnap.data())
+        } else if (user.email === 'nadjibullahu@gmail.com') {
+           // Auto-create Master Admin profile if it doesn't exist
+           const masterData = {
+              uid: user.uid,
+              email: user.email,
+              firstName: 'Nadjibullah',
+              lastName: 'Uwabato',
+              role: 'admin',
+              status: 'active',
+              createdAt: new Date().toISOString()
+           }
+           await setDoc(doc(db, 'users', user.uid), masterData)
+           setUserData(masterData)
         }
       } else {
         setCurrentUser(null)

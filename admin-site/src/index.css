@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-white selection:bg-accent selection:text-background;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display;
+  }
+}
+
+.glass {
+  @apply bg-white/5 backdrop-blur-md border border-white/10;
+}
+
+.glass-dark {
+  @apply bg-black/40 backdrop-blur-xl border border-white/10;
+}
+
+.text-gradient {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-accent to-primary-light;
+}
+
+.btn-primary {
+  @apply px-6 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-full transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg shadow-primary/20;
+}
+
+.btn-outline {
+  @apply px-6 py-2.5 border border-primary/50 text-primary-light hover:bg-primary/10 rounded-full transition-all duration-300;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-background;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-primary/30 rounded-full hover:bg-primary/50 transition-colors;
+}
