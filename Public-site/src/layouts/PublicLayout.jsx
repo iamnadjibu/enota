@@ -42,7 +42,7 @@ export default function PublicLayout({ children }) {
           <div className="w-10 h-10 rounded-full border-2 border-accent overflow-hidden shadow-lg shadow-accent/20 group-hover:scale-110 transition-transform bg-primary">
             <img src={branding.logoUrl} alt={branding.portalName} className="w-full h-full object-cover" />
           </div>
-          <span className="text-2xl font-display font-bold tracking-tighter text-white uppercase">{branding.portalName}</span>
+          <span className="text-2xl font-display font-bold tracking-tighter text-white">{branding.portalName}</span>
         </Link>
 
         {/* Desktop Links */}
@@ -101,7 +101,7 @@ export default function PublicLayout({ children }) {
               <div className="w-8 h-8 rounded-full border border-accent overflow-hidden bg-primary">
                 <img src={branding.logoUrl} alt={branding.portalName} className="w-full h-full object-cover" />
               </div>
-              <span className="text-xl font-display font-bold tracking-tighter text-white uppercase">{branding.portalName}</span>
+              <span className="text-xl font-display font-bold tracking-tighter text-white">{branding.portalName}</span>
             </div>
             <p className="text-sm text-white/60 leading-relaxed max-w-xs mx-auto md:mx-0">
               {branding.footerText}

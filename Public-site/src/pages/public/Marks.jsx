@@ -26,6 +26,17 @@ export default function Marks() {
   const [loading, setLoading] = useState(false)
   const [studentData, setStudentData] = useState(null)
   const [error, setError] = useState('')
+  
+  // Claim Your Spot State
+  const [showClaimForm, setShowClaimForm] = useState(false)
+  const [claimData, setClaimData] = useState({
+    firstName: '',
+    lastName: '',
+    regNumber: '',
+    gender: 'Male',
+    faculty: 'FILMMAKING AND VIDEO PRODUCTION',
+    institution: 'NAD CLASS'
+  })
 
   const handleSearch = async (e) => {
     e.preventDefault()
@@ -43,6 +54,8 @@ export default function Marks() {
         setStudentData(querySnapshot.docs[0].data())
       } else {
         setError('No records found for this Registration Number.')
+        setShowClaimForm(true)
+        setClaimData({ ...claimData, regNumber: regNumber.toUpperCase() })
       }
     } catch (err) {
       console.error(err)
@@ -62,6 +75,12 @@ export default function Marks() {
     const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width
     pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
     pdf.save(`${studentData.firstName}_${studentData.lastName}_Marks.pdf`)
+  }
+
+  const handleClaimSpot = (e) => {
+    e.preventDefault()
+    const message = `Hello eNOTA Team, I want to claim my spot.%0A%0A*First Name:* ${claimData.firstName}%0A*Last Name:* ${claimData.lastName}%0A*Reg Number:* ${claimData.regNumber}%0A*Gender:* ${claimData.gender}%0A*Faculty:* ${claimData.faculty}%0A*Institution:* ${claimData.institution}`
+    window.open(`https://wa.me/250786487234?text=${message}`, '_blank')
   }
 
   return (
@@ -99,16 +118,92 @@ export default function Marks() {
         </form>
 
         <AnimatePresence mode="wait">
-          {error && (
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-red-500/10 border border-red-500/20 p-6 rounded-2xl text-red-400 flex items-center gap-3 justify-center mb-8"
+              className="space-y-8 mb-8"
             >
-              <AlertCircle size={24} /> {error}
+              <div className="bg-red-500/10 border border-red-500/20 p-6 rounded-2xl text-red-400 flex items-center gap-3 justify-center">
+                <AlertCircle size={24} /> {error}
+              </div>
+
+              {showClaimForm && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="glass p-8 rounded-[40px] border border-accent/20 space-y-8"
+                >
+                  <div className="text-center">
+                    <h3 className="text-2xl font-bold tracking-tight mb-2">Claim <span className="text-accent">Your Spot</span></h3>
+                    <p className="text-white/40 text-sm">Fill in your correct details and the eNOTA team will attend to your enrollment.</p>
+                  </div>
+
+                  <form onSubmit={handleClaimSpot} className="grid md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">First Name</label>
+                       <input 
+                        type="text" required
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm"
+                        value={claimData.firstName} onChange={(e) => setClaimData({...claimData, firstName: e.target.value})}
+                       />
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Last Name</label>
+                       <input 
+                        type="text" required
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm"
+                        value={claimData.lastName} onChange={(e) => setClaimData({...claimData, lastName: e.target.value})}
+                       />
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Reg Number</label>
+                       <input 
+                        type="text" disabled
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm opacity-50 cursor-not-allowed"
+                        value={claimData.regNumber}
+                       />
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Gender</label>
+                       <select 
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm appearance-none"
+                        value={claimData.gender} onChange={(e) => setClaimData({...claimData, gender: e.target.value})}
+                       >
+                         <option className="bg-background">Male</option>
+                         <option className="bg-background">Female</option>
+                       </select>
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Faculty</label>
+                       <select 
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm appearance-none"
+                        value={claimData.faculty} onChange={(e) => setClaimData({...claimData, faculty: e.target.value})}
+                       >
+                         {['FILMMAKING AND VIDEO PRODUCTION', 'MULTIMEDIA PRODUCTION', 'COLOR GRADING', 'AI FILMMAKING', 'VIBE CODING'].map(f => (
+                           <option key={f} className="bg-background">{f}</option>
+                         ))}
+                       </select>
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Institution</label>
+                       <select 
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm appearance-none"
+                        value={claimData.institution} onChange={(e) => setClaimData({...claimData, institution: e.target.value})}
+                       >
+                         {['NAD CLASS', 'KSP RWANDA', 'NAD PRODUCTION'].map(i => (
+                           <option key={i} className="bg-background">{i}</option>
+                         ))}
+                       </select>
+                    </div>
+                    
+                    <button type="submit" className="md:col-span-2 btn-primary py-4 text-sm font-bold flex items-center justify-center gap-3">
+                       Send to WhatsApp (+250786487234)
+                    </button>
+                  </form>
+                </motion.div>
+              )}
             </motion.div>
-          )}
 
           {studentData && (
             <motion.div 
@@ -119,9 +214,12 @@ export default function Marks() {
               {/* Report Preview */}
               <div id="report-card" className="bg-white text-black p-8 md:p-12 rounded-lg shadow-2xl overflow-hidden font-sans border border-primary/20">
                 <div className="flex flex-col md:flex-row justify-between items-center border-b-2 border-primary/20 pb-8 mb-8 gap-6">
-                  <div className="text-center md:text-left">
-                    <h2 className="text-3xl font-extrabold text-primary mb-1 tracking-tighter">ENOTA PORTAL</h2>
-                    <p className="text-[10px] uppercase tracking-widest font-bold text-primary opacity-60">The Marks Report</p>
+                  <div className="flex flex-col md:flex-row items-center gap-4 text-center md:text-left">
+                    <img src="/android-chrome-512x512.png" alt="eNOTA Logo" className="w-16 h-16 rounded-xl border border-primary/10 shadow-sm" />
+                    <div>
+                      <h2 className="text-3xl font-extrabold text-primary mb-1 tracking-tighter">eNOTA PORTAL</h2>
+                      <p className="text-[10px] uppercase tracking-widest font-bold text-primary opacity-60">The Marks Report</p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-4 bg-primary/5 px-6 py-4 rounded-xl border border-primary/10">
                     <div className="text-right">

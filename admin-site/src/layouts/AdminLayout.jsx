@@ -54,7 +54,7 @@ export default function AdminLayout() {
           <div className="w-8 h-8 rounded-full bg-primary border border-accent overflow-hidden shrink-0">
             <img src={branding.logoUrl} alt={branding.portalName} className="w-full h-full object-cover" />
           </div>
-          <span className="text-xl font-display font-bold whitespace-nowrap uppercase truncate max-w-[180px]">{branding.portalName}</span>
+          <span className="text-xl font-display font-bold whitespace-nowrap truncate max-w-[180px]">{branding.portalName}</span>
         </div>
 
         <nav className="flex-grow p-4 space-y-2 mt-4">
