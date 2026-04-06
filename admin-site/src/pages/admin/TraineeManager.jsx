@@ -25,7 +25,9 @@ export default function TraineeManager() {
     const q = query(usersRef, orderBy('createdAt', 'desc'))
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const userList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      const userList = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(user => user.role === 'student')
       setTrainees(userList)
       setLoading(false)
     })

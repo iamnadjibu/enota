@@ -32,7 +32,7 @@ export default function AdminManager() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const adminList = snapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(user => user.role === 'admin')
+        .filter(user => user.role === 'admin' || user.role === 'master')
       setAdmins(adminList)
       setLoading(false)
     })
