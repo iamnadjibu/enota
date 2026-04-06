@@ -11,17 +11,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install & Build Admin Site
+        run: |
+          cd admin-site
+          npm install --force
+          npm run build
+
       - name: Install & Build Public Site
         run: |
           cd Public-site
           npm install --force
           npm run build
 
-      - name: Install & Build Admin Site
+      - name: Merge Dist Folders
         run: |
-          cd admin-site
-          npm install --force
-          npm run build
+          mkdir -p Public-site/dist/admin
+          cp -r admin-site/dist/* Public-site/dist/admin/
 
       - name: Deploy to Firebase
         uses: FirebaseExtended/action-hosting-deploy@v0
