@@ -36,12 +36,18 @@ export default function MaterialsManager() {
   })
 
   useEffect(() => {
+    // Wait for userData if not Master
+    if (!isMaster && !userData?.faculty) return
+
     const q = isMaster 
       ? query(collection(db, 'courses'))
       : query(collection(db, 'courses'), where('faculty', '==', userData?.faculty))
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setCourses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
+      setLoading(false)
+    }, (err) => {
+      console.error(err)
       setLoading(false)
     })
 

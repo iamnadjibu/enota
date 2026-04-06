@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Users, GraduationCap, Award, TrendingUp, BarChart3, PieChart as PieChartIcon, ChevronRight } from 'lucide-react'
 import { collection, query, getDocs, where } from 'firebase/firestore'
 import { db } from '../../firebase'
@@ -24,6 +24,13 @@ export default function Dashboard() {
 
   useEffect(() => {
     const fetchData = async () => {
+      // Wait for userData if not Master
+      if (!isMaster && !userData?.faculty) {
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
       try {
         const marksRef = collection(db, 'marks')
         let q = marksRef
@@ -51,9 +58,9 @@ export default function Dashboard() {
 
           // Chart Data (Course Averages)
           const courseAvgs = [
-            { name: 'Filmmaking', value: (data.reduce((acc, curr) => acc + (parseFloat(curr.filmmakingMarks) || 0), 0) / total).toFixed(1) },
-            { name: 'Camera Op', value: (data.reduce((acc, curr) => acc + (parseFloat(curr.cameraOperationMarks) || 0), 0) / total).toFixed(1) },
-            { name: 'Video Editing', value: (data.reduce((acc, curr) => acc + (parseFloat(curr.videoEditingMarks) || 0), 0) / total).toFixed(1) },
+            { name: 'Filmmaking', value: parseFloat((data.reduce((acc, curr) => acc + (parseFloat(curr.filmmakingMarks) || 0), 0) / total).toFixed(1)) || 0 },
+            { name: 'Camera Op', value: parseFloat((data.reduce((acc, curr) => acc + (parseFloat(curr.cameraOperationMarks) || 0), 0) / total).toFixed(1)) || 0 },
+            { name: 'Video Editing', value: parseFloat((data.reduce((acc, curr) => acc + (parseFloat(curr.videoEditingMarks) || 0), 0) / total).toFixed(1)) || 0 },
           ]
           setChartData(courseAvgs)
 
@@ -62,12 +69,12 @@ export default function Dashboard() {
           const femaleMarks = data.filter(d => d.gender === 'Female')
           
           setGenderData([
-            { name: 'Male', value: maleMarks.length > 0 ? (maleMarks.reduce((acc, curr) => acc + (parseFloat(curr.averageMarks) || 0), 0) / maleMarks.length).toFixed(1) : 0 },
-            { name: 'Female', value: femaleMarks.length > 0 ? (femaleMarks.reduce((acc, curr) => acc + (parseFloat(curr.averageMarks) || 0), 0) / femaleMarks.length).toFixed(1) : 0 }
+            { name: 'Male', value: maleMarks.length > 0 ? parseFloat((maleMarks.reduce((acc, curr) => acc + (parseFloat(curr.averageMarks) || 0), 0) / maleMarks.length).toFixed(1)) : 0 },
+            { name: 'Female', value: femaleMarks.length > 0 ? parseFloat((femaleMarks.reduce((acc, curr) => acc + (parseFloat(curr.averageMarks) || 0), 0) / femaleMarks.length).toFixed(1)) : 0 }
           ])
         }
       } catch (err) {
-        console.error(err)
+        console.error("Dashboard error:", err)
       } finally {
         setLoading(false)
       }
