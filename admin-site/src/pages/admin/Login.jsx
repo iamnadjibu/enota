@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { Mail, Lock, LogIn, AlertCircle, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { Link, useNavigate } from 'react-router-dom'
+import { useBranding } from '../../context/BrandingContext'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -11,6 +12,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const { login, register } = useAuth()
+  const { branding } = useBranding()
   const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
@@ -59,9 +61,9 @@ export default function Login() {
         
         <div className="text-center mb-10">
           <div className="w-16 h-16 rounded-3xl bg-primary border border-accent overflow-hidden mb-6 mx-auto shadow-lg shadow-accent/20">
-            <img src="/apple-touch-icon.png" alt="eNOTA" className="w-full h-full object-cover" />
+            <img src={branding.logoUrl} alt={branding.portalName} className="w-full h-full object-cover" />
           </div>
-          <h1 className="text-3xl font-display font-bold mb-2">Admin <span className="text-accent">Portal</span></h1>
+          <h1 className="text-3xl font-display font-bold mb-2 uppercase">{branding.portalName}</h1>
           <p className="text-white/40 text-sm">Sign in to manage student performance.</p>
         </div>
 

@@ -6,19 +6,22 @@ import Marks from './pages/public/Marks'
 import Materials from './pages/public/Materials'
 import Register from './pages/public/Register'
 import { AuthProvider } from './context/AuthContext'
+import { BrandingProvider } from './context/BrandingContext'
 
 function App() {
   return (
     <AuthProvider>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/about" element={<About />} />
-        <Route path="/contact" element={<Contact />} />
-        <Route path="/marks" element={<Marks />} />
-        <Route path="/materials" element={<Materials />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="*" element={<Home />} />
-      </Routes>
+      <BrandingProvider>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/marks" element={<Marks />} />
+          <Route path="/materials" element={<Materials />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="*" element={<Home />} />
+        </Routes>
+      </BrandingProvider>
     </AuthProvider>
   )
 }

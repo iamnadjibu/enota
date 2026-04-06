@@ -378,6 +378,28 @@ export default function MarksManager() {
                    </div>
                 </div>
 
+                <div className="grid sm:grid-cols-2 gap-6">
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Gender</label>
+                     <select 
+                      disabled={!isMaster}
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent transition-colors appearance-none text-sm disabled:opacity-50"
+                      value={formData.gender} onChange={(e) => setFormData({...formData, gender: e.target.value})}
+                     >
+                       <option value="Male" className="bg-background">Male</option>
+                       <option value="Female" className="bg-background">Female</option>
+                     </select>
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Institution</label>
+                     <input 
+                      type="text" required 
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm"
+                      value={formData.institution} onChange={(e) => setFormData({...formData, institution: e.target.value})}
+                     />
+                   </div>
+                </div>
+
                 <div className="grid grid-cols-3 gap-6 pt-6 border-t border-white/5">
                    <div className="space-y-2">
                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Filmmaking</label>

@@ -10,12 +10,15 @@ import {
   X, 
   Bell, 
   Search,
-  UserCircle
+  UserCircle,
+  BookOpen
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { useBranding } from '../context/BrandingContext'
 import { motion, AnimatePresence } from 'framer-motion'
 
 export default function AdminLayout() {
+  const { branding } = useBranding()
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const location = useLocation()
   const { logout, userData, isMaster } = useAuth()
@@ -23,7 +26,9 @@ export default function AdminLayout() {
 
   const navItems = [
     { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={20} /> },
+    { name: 'Trainees', path: '/trainees', icon: <Users size={20} />, masterOnly: true },
     { name: 'Marks Manager', path: '/marks', icon: <GraduationCap size={20} /> },
+    { name: 'Materials Manager', path: '/materials', icon: <BookOpen size={20} /> },
     { name: 'Admin Manager', path: '/admins', icon: <Users size={20} />, masterOnly: true },
     { name: 'Site Content', path: '/content', icon: <Settings size={20} />, masterOnly: true },
   ]
@@ -47,9 +52,9 @@ export default function AdminLayout() {
       >
         <div className="p-6 h-20 flex items-center gap-3 border-b border-white/5">
           <div className="w-8 h-8 rounded-full bg-primary border border-accent overflow-hidden shrink-0">
-            <img src="/apple-touch-icon.png" alt="eNOTA Logo" className="w-full h-full object-cover" />
+            <img src={branding.logoUrl} alt={branding.portalName} className="w-full h-full object-cover" />
           </div>
-          <span className="text-xl font-display font-bold whitespace-nowrap">eNOTA <span className="text-accent">ADMIN</span></span>
+          <span className="text-xl font-display font-bold whitespace-nowrap uppercase truncate max-w-[180px]">{branding.portalName}</span>
         </div>
 
         <nav className="flex-grow p-4 space-y-2 mt-4">

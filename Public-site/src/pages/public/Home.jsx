@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { ArrowRight, Play, Award, Users, BookOpen, Film } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import PublicLayout from '../../layouts/PublicLayout'
+import { useBranding } from '../../context/BrandingContext'
 
 const fadeInUp = {
   initial: { opacity: 0, y: 20 },
@@ -11,6 +12,7 @@ const fadeInUp = {
 }
 
 export default function Home() {
+  const { branding } = useBranding()
   const stats = [
     { label: 'Trainees', value: '500+', icon: <Users size={20} className="text-secondary" /> },
     { label: 'Courses', value: '12+', icon: <Film size={20} className="text-secondary" /> },
@@ -55,7 +57,7 @@ export default function Home() {
             transition={{ delay: 0.2 }}
             className="text-base sm:text-lg md:text-xl text-white/60 max-w-2xl mb-12 leading-relaxed"
           >
-            Optimize your education journey with eNOTA. Track your progress, access materials, and achieve excellence in Filmmaking and Digital Arts.
+            Optimize your education journey with {branding.portalName}. Track your progress, access materials, and achieve excellence.
           </motion.p>
 
           <motion.div 

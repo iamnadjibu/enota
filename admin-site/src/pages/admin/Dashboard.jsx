@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Users, GraduationCap, Award, TrendingUp, BarChart3, PieChart as PieChartIcon } from 'lucide-react'
+import { Users, GraduationCap, Award, TrendingUp, BarChart3, PieChart as PieChartIcon, ChevronRight } from 'lucide-react'
 import { collection, query, getDocs, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../context/AuthContext'
@@ -20,6 +20,7 @@ export default function Dashboard() {
   const [chartData, setChartData] = useState([])
   const [genderData, setGenderData] = useState([])
   const [loading, setLoading] = useState(true)
+  const [expandedFaculty, setExpandedFaculty] = useState(null)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -184,23 +185,68 @@ export default function Dashboard() {
         </motion.div>
       </div>
 
-      {/* Recent Activity or Quick List Placeholder */}
+      {/* Faculty Data Dropdown (Master Admin Only) */}
       <div className="glass p-8 rounded-[40px] border border-white/5">
-         <h4 className="text-lg font-bold mb-6">Quick Overview</h4>
+         <div className="flex items-center justify-between mb-6">
+            <h4 className="text-lg font-bold">Faculty Analytics</h4>
+            {!isMaster && <span className="text-[10px] bg-white/5 px-2 py-1 rounded text-white/40 uppercase tracking-widest">My Faculty Only</span>}
+         </div>
          <div className="space-y-4">
-            {['Multimedia Production', 'Filmmaking', 'Color Grading'].map((faculty, i) => (
-              <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl hover:bg-white/10 transition-colors">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center text-accent">
-                    <GraduationCap size={20} />
+            {['FILMMAKING AND VIDEO PRODUCTION', 'MULTIMEDIA PRODUCTION', 'COLOR GRADING', 'AI FILMMAKING', 'VIBE CODING'].map((faculty, i) => (
+              (!isMaster && faculty !== userData?.faculty) ? null : (
+                <div key={i} className="space-y-2">
+                  <div 
+                    onClick={() => setExpandedFaculty(expandedFaculty === faculty ? null : faculty)}
+                    className={`flex items-center justify-between p-4 bg-white/5 rounded-2xl hover:bg-white/10 transition-all cursor-pointer border ${expandedFaculty === faculty ? 'border-accent/30 bg-accent/5' : 'border-transparent'}`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${expandedFaculty === faculty ? 'bg-accent text-background' : 'bg-primary/20 text-accent'}`}>
+                        <GraduationCap size={20} />
+                      </div>
+                      <div>
+                        <h5 className="font-bold text-sm">{faculty}</h5>
+                        <p className="text-[10px] text-white/40 uppercase tracking-widest">Performance Insights</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                       <div className="text-right hidden sm:block">
+                          <p className="text-xs font-bold text-accent">View Detailed Stats</p>
+                       </div>
+                       <motion.div
+                        animate={{ rotate: expandedFaculty === faculty ? 90 : 0 }}
+                       >
+                         <ChevronRight size={18} className="text-white/20" />
+                       </motion.div>
+                    </div>
                   </div>
-                  <div>
-                    <h5 className="font-bold text-sm">{faculty}</h5>
-                    <p className="text-[10px] text-white/40 uppercase tracking-widest">Active Class</p>
-                  </div>
+
+                  <AnimatePresence>
+                    {expandedFaculty === faculty && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="p-6 bg-white/[0.02] border border-white/5 rounded-2xl mx-2 mb-4 grid sm:grid-cols-3 gap-6">
+                           <div className="space-y-1">
+                              <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Average Mark</p>
+                              <p className="text-xl font-bold text-accent">84.2%</p>
+                           </div>
+                           <div className="space-y-1">
+                              <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Total Trainees</p>
+                              <p className="text-xl font-bold text-white">42</p>
+                           </div>
+                           <div className="space-y-1">
+                              <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Pass Rate</p>
+                              <p className="text-xl font-bold text-secondary">92%</p>
+                           </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
-                <button className="text-accent text-xs font-bold hover:underline">VIEW DATA</button>
-              </div>
+              )
             ))}
          </div>
       </div>

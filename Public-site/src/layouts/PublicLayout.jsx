@@ -2,8 +2,10 @@ import React, { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Menu, X, Instagram, Youtube, Twitter, MessageCircle, Mail, MapPin } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useBranding } from '../context/BrandingContext'
 
 export default function PublicLayout({ children }) {
+  const { branding, loading } = useBranding()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const location = useLocation()
 
@@ -38,9 +40,9 @@ export default function PublicLayout({ children }) {
       <nav className="fixed top-0 left-0 right-0 z-50 glass h-20 flex items-center px-6 lg:px-12 justify-between">
         <Link to="/" className="flex items-center gap-2 group">
           <div className="w-10 h-10 rounded-full border-2 border-accent overflow-hidden shadow-lg shadow-accent/20 group-hover:scale-110 transition-transform bg-primary">
-            <img src="/apple-touch-icon.png" alt="eNOTA Logo" className="w-full h-full object-cover" />
+            <img src={branding.logoUrl} alt={branding.portalName} className="w-full h-full object-cover" />
           </div>
-          <span className="text-2xl font-display font-bold tracking-tighter text-white">eNOTA <span className="text-secondary">PORTAL</span></span>
+          <span className="text-2xl font-display font-bold tracking-tighter text-white uppercase">{branding.portalName}</span>
         </Link>
 
         {/* Desktop Links */}
@@ -97,12 +99,12 @@ export default function PublicLayout({ children }) {
           <div className="space-y-6 text-center md:text-left flex flex-col items-center md:items-start">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full border border-accent overflow-hidden bg-primary">
-                <img src="/apple-touch-icon.png" alt="eNOTA Logo" className="w-full h-full object-cover" />
+                <img src={branding.logoUrl} alt={branding.portalName} className="w-full h-full object-cover" />
               </div>
-              <span className="text-xl font-display font-bold tracking-tighter text-white">eNOTA <span className="text-accent">PORTAL</span></span>
+              <span className="text-xl font-display font-bold tracking-tighter text-white uppercase">{branding.portalName}</span>
             </div>
             <p className="text-sm text-white/60 leading-relaxed max-w-xs mx-auto md:mx-0">
-              Designed by NAD PRODUCTION to facilitate Trainees in Filmmaking, Video Production, COLOR GRADING, AI FILMMAKING, VIBE CODING, and Others. Primarily from NAD CLASS and KSP RWANDA.
+              {branding.footerText}
             </p>
           </div>
 
@@ -154,7 +156,7 @@ export default function PublicLayout({ children }) {
         </div>
         
         <div className="max-w-7xl mx-auto mt-16 pt-8 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-white/40">
-          <p>&copy; {new Date().getFullYear()} eNOTA Portal. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} {branding.portalName}. All rights reserved.</p>
           <p className="flex items-center gap-1">
             Made with <span className="text-accent text-lg">♥</span> by <a href="https://iamnadjibu.com" className="hover:text-accent underline">NAD PRODUCTION</a>
           </p>

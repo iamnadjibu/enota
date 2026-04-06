@@ -11,7 +11,8 @@ import {
   Search,
   Filter,
   CheckCircle,
-  XCircle
+  XCircle,
+  ShieldAlert
 } from 'lucide-react'
 import { collection, query, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore'
 import { db } from '../../firebase'
@@ -51,6 +52,17 @@ export default function AdminManager() {
     if (window.confirm('Are you sure you want to delete this admin?')) {
       try {
         await deleteDoc(doc(db, 'users', adminId))
+      } catch (err) {
+        console.error(err)
+      }
+    }
+  }
+
+  const handlePromoteToMaster = async (adminId) => {
+    if (window.confirm('Are you sure you want to promote this admin to MASTER ADMIN? This cannot be undone easily.')) {
+      try {
+        await updateDoc(doc(db, 'users', adminId), { role: 'master' })
+        alert('Admin promoted to Master!')
       } catch (err) {
         console.error(err)
       }
@@ -172,13 +184,20 @@ export default function AdminManager() {
                            </button>
                          </>
                        ) : admin.status === 'active' ? (
-                         <>
+                         <div className="flex items-center justify-end gap-2">
                            <button 
                             onClick={() => handleStatusChange(admin.id, 'inactive')}
-                            className="p-2.5 rounded-xl bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500 hover:text-white transition-all"
+                            className="p-2.5 rounded-xl bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500 hover:text-white transition-all transition-all"
                             title="Suspend"
                            >
                              <Pause size={18} />
+                           </button>
+                           <button 
+                            onClick={() => handlePromoteToMaster(admin.id)}
+                            className="p-2.5 rounded-xl bg-purple-500/10 text-purple-500 hover:bg-purple-500 hover:text-white transition-all shadow-lg shadow-purple-500/5 group/p"
+                            title="Promote to Master"
+                           >
+                             <ShieldAlert size={18} className="group-hover/p:scale-110 transition-transform" />
                            </button>
                            <button 
                             onClick={() => handleDelete(admin.id)}
@@ -187,7 +206,7 @@ export default function AdminManager() {
                            >
                              <Trash2 size={18} />
                            </button>
-                         </>
+                         </div>
                        ) : (
                          <>
                            <button 

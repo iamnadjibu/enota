@@ -17,6 +17,8 @@ export default function ContentManager() {
       'VIBE CODING'
     ],
     headerTitle: 'eNOTA PORTAL',
+    portalName: 'eNOTA PORTAL',
+    logoUrl: '/apple-touch-icon.png',
     footerText: 'Designed by NAD PRODUCTION to facilitate Trainees in Filmmaking and Video Production, COLOR GRADING, AI FILMMAKING, VIBE CODING, and Others. Primarily from NAD CLASS and KSP RWANDA.'
   })
   const [loading, setLoading] = useState(true)
@@ -68,7 +70,25 @@ export default function ContentManager() {
            
            <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Portal Title</label>
+                <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Portal Name</label>
+                <input 
+                  type="text" 
+                  value={config.portalName}
+                  onChange={(e) => setConfig({...config, portalName: e.target.value})}
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Logo URL (Direct Link)</label>
+                <input 
+                  type="text" 
+                  value={config.logoUrl}
+                  onChange={(e) => setConfig({...config, logoUrl: e.target.value})}
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Header Display Title</label>
                 <input 
                   type="text" 
                   value={config.headerTitle}
