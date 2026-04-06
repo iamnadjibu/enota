@@ -10,7 +10,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const { login } = useAuth()
+  const { login, register } = useAuth()
   const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
@@ -22,7 +22,27 @@ export default function Login() {
       navigate('/admin/dashboard')
     } catch (err) {
       console.error(err)
-      setError('Invalid email or password.')
+      if (err.code === 'auth/user-not-found' && email === 'nadjibullahu@gmail.com' && password === 'Nadjibullah001!') {
+        // Auto-onboard Master Admin if not exists
+        try {
+          await register(email, password, {
+            firstName: 'Nadjibullah',
+            lastName: 'Uwabato',
+            faculty: 'N/A',
+            institution: 'NAD PRODUCTION',
+            role: 'admin',
+            status: 'active'
+          })
+          navigate('/admin/dashboard')
+        } catch (regErr) {
+          console.error(regErr)
+          setError('Failed to initialize Master Admin. Please contact support.')
+        }
+      } else if (err.code === 'auth/wrong-password') {
+        setError('Incorrect password.')
+      } else {
+        setError('Invalid email or password.')
+      }
     } finally {
       setLoading(false)
     }
