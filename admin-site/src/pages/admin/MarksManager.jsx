@@ -29,6 +29,9 @@ export default function MarksManager() {
   const [selectedCourses, setSelectedCourses] = useState([])
   const [selectedMark, setSelectedMark] = useState(null)
   const [isSeeding, setIsSeeding] = useState(false)
+  const [universityFaculties, setUniversityFaculties] = useState([])
+  const [universityInstitutions, setUniversityInstitutions] = useState([])
+
 
   // Form State
   const [formData, setFormData] = useState({
@@ -44,6 +47,14 @@ export default function MarksManager() {
 
 
   useEffect(() => {
+    // Fetch Global Config
+    const unsubFaculties = onSnapshot(query(collection(db, 'faculties'), orderBy('name')), (snapshot) => {
+      setUniversityFaculties(snapshot.docs.map(doc => doc.data().name))
+    })
+    const unsubInstitutions = onSnapshot(query(collection(db, 'institutions'), orderBy('name')), (snapshot) => {
+      setUniversityInstitutions(snapshot.docs.map(doc => doc.data().name))
+    })
+
     const marksRef = collection(db, 'marks')
     let q = marksRef
     
@@ -58,8 +69,13 @@ export default function MarksManager() {
       setLoading(false)
     })
 
-    return unsubscribe
+    return () => {
+      unsubFaculties()
+      unsubInstitutions()
+      unsubscribe()
+    }
   }, [isMaster, userData?.faculty])
+
 
   const calculateGrade = (m) => {
     if (m === 'N/A' || m === 0 || m === '0' || !m) return 'F'
@@ -157,9 +173,62 @@ export default function MarksManager() {
   }
 
   const seedInitialData = async () => {
-    if (!window.confirm('This will seed the initial student marks. Continue?')) return
+    if (!window.confirm('This will seed the initial student marks, faculties, and courses. Continue?')) return
     setIsSeeding(true)
     try {
+      const batch = writeBatch(db)
+
+      // 1. Seed Faculties
+      const facultyList = [
+        'MULTIMEDIA PRODUCTION',
+        'FILMMAKING AND VIDEO PRODUCTION',
+        'PHOTOGRAPHY',
+        'COLOR GRADING',
+        'AI FILMMAKING',
+        'VIBE CODING'
+      ]
+      facultyList.forEach(f => {
+        const docRef = doc(db, 'faculties', f.replace(/\s+/g, '-')) // Stable IDs
+        batch.set(docRef, { name: f, createdAt: new Date().toISOString() })
+      })
+
+      // 2. Seed Institutions
+      const instList = ['NAD CLASS', 'KSP RWANDA', 'NAD PRODUCTION']
+      instList.forEach(i => {
+        const docRef = doc(db, 'institutions', i.replace(/\s+/g, '-'))
+        batch.set(docRef, { name: i, createdAt: new Date().toISOString() })
+      })
+
+      // 3. Seed Courses with respective Faculty assignments
+      const coursesToSeed = [
+        { 
+          title: 'FILMMAKING', 
+          faculties: ['MULTIMEDIA PRODUCTION', 'FILMMAKING AND VIDEO PRODUCTION'],
+          description: 'Master the art of storytelling and cinematic production.'
+        },
+        { 
+          title: 'CAMERA OPERATION', 
+          faculties: ['MULTIMEDIA PRODUCTION', 'FILMMAKING AND VIDEO PRODUCTION', 'PHOTOGRAPHY'],
+          description: 'Technical mastery of professional cinema and photography cameras.'
+        },
+        { 
+          title: 'VIDEO EDITING', 
+          faculties: ['MULTIMEDIA PRODUCTION', 'FILMMAKING AND VIDEO PRODUCTION'],
+          description: 'Post-production excellence using industry software.'
+        }
+      ]
+
+      coursesToSeed.forEach(c => {
+        const docRef = doc(db, 'courses', c.title.replace(/\s+/g, '-'))
+        batch.set(docRef, { 
+          ...c, 
+          faculty: c.faculties[0], // Legacy support
+          units: [], 
+          createdAt: new Date().toISOString() 
+        })
+      })
+
+      // 4. Seed Student Marks
       const csvData = [
         ["DORA SHOLAMI","MWAMIKAZI","KSP0103999","N/A",54,"E",73,"B",95,"A+",74.00,"B"],
         ["MARIE ASSOUMPTA","UWAMAHORO","KSP0103023","N/A",90,"A+",97,"A+",94,"A+",93.67,"A+"],
@@ -220,7 +289,6 @@ export default function MarksManager() {
         ["ALLAN CHRISTOPHER","TABAARA","KSP0101983","FILMMAKING AND VIDEO PRODUCTION",68,"C+",78,"B+",86,"A",77.33,"B+"]
       ]
 
-      const batch = writeBatch(db)
       csvData.forEach(row => {
         const docRef = doc(collection(db, 'marks'))
         batch.set(docRef, {
@@ -228,21 +296,21 @@ export default function MarksManager() {
           lastName: row[1],
           regNumber: row[2],
           faculty: row[3],
-          filmmakingMarks: row[4],
-          gradeFilmmaking: row[5],
-          cameraOperationMarks: row[6],
-          gradeCameraOperation: row[7],
-          videoEditingMarks: row[8],
-          gradeVideoEditing: row[9],
+          marks: {
+            'FILMMAKING': row[4],
+            'CAMERA OPERATION': row[6],
+            'VIDEO EDITING': row[8]
+          },
           averageMarks: row[10],
           overallGrade: row[11],
-          institution: 'NAD CLASS', // Default for seed
-          gender: 'Male', // Default for seed
+          institution: 'NAD CLASS',
+          gender: 'Male',
           createdAt: new Date().toISOString()
         })
       })
+
       await batch.commit()
-      alert('Data seeded successfully!')
+      alert('Full initial data seeded successfully (Faculties, Institutions, Courses, and Marks)!')
     } catch (err) {
       console.error(err)
       alert('Seeding failed.')
@@ -250,6 +318,7 @@ export default function MarksManager() {
       setIsSeeding(false)
     }
   }
+
 
   const filteredMarks = marks.filter(mark => 
     mark.firstName?.toLowerCase().includes(search.toLowerCase()) || 
@@ -439,12 +508,17 @@ export default function MarksManager() {
                            setFormData({...formData, faculty: e.target.value, marks: {}})
                            setSelectedCourses([])
                          }}
-                        >
-                          {['FILMMAKING AND VIDEO PRODUCTION', 'MULTIMEDIA PRODUCTION', 'COLOR GRADING', 'AI FILMMAKING', 'VIBE CODING'].map(f => (
-                            <option key={f} value={f} className="bg-background">{f}</option>
-                          ))}
+                         >
+                          {universityFaculties.length > 0 ? (
+                            universityFaculties.map(f => (
+                              <option key={f} value={f} className="bg-background">{f}</option>
+                            ))
+                          ) : (
+                            <option value={userData?.faculty} className="bg-background">{userData?.faculty}</option>
+                          )}
                           <option value="N/A" className="bg-background">Other/General</option>
                         </select>
+
                       ) : (
                         <input 
                          type="text" disabled 
@@ -468,12 +542,21 @@ export default function MarksManager() {
                     </div>
                     <div className="space-y-2">
                       <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Institution</label>
-                      <input 
-                       type="text" required 
-                       className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm"
+                      <select 
+                       className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent appearance-none text-sm transition-colors"
                        value={formData.institution} onChange={(e) => setFormData({...formData, institution: e.target.value})}
-                      />
+                      >
+                        {universityInstitutions.length > 0 ? (
+                          universityInstitutions.map(inst => (
+                            <option key={inst} value={inst} className="bg-background">{inst}</option>
+                          ))
+                        ) : (
+                          <option value="NAD CLASS" className="bg-background">NAD CLASS</option>
+                        )}
+                        <option value="Other" className="bg-background">Other</option>
+                      </select>
                     </div>
+
                  </div>
 
                  <div className="pt-6 border-t border-white/5 space-y-8">

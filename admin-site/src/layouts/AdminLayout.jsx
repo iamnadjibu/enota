@@ -30,8 +30,10 @@ export default function AdminLayout() {
     { name: 'Marks Manager', path: '/marks', icon: <GraduationCap size={20} /> },
     { name: 'Materials Manager', path: '/materials', icon: <BookOpen size={20} /> },
     { name: 'Admin Manager', path: '/admins', icon: <Users size={20} />, masterOnly: true },
+    { name: 'University Setup', path: '/university', icon: <School size={20} />, masterOnly: true },
     { name: 'Site Content', path: '/content', icon: <Settings size={20} />, masterOnly: true },
   ]
+
 
   const handleLogout = async () => {
     try {

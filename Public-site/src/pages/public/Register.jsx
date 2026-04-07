@@ -1,9 +1,12 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Eye, EyeOff, User, Mail, Lock, GraduationCap, Building2, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react'
 import PublicLayout from '../../layouts/PublicLayout'
 import { useAuth } from '../../context/AuthContext'
 import { Link } from 'react-router-dom'
+import { collection, query, onSnapshot, orderBy } from 'firebase/firestore'
+import { db } from '../../firebase'
+
 
 export default function Register() {
   const [showPassword, setShowPassword] = useState(false)
@@ -19,25 +22,37 @@ export default function Register() {
     email: '',
     password: '',
     confirmPassword: '',
-    faculty: 'FILMMAKING AND VIDEO PRODUCTION',
-    institution: 'NAD CLASS'
+    faculty: '',
+    institution: ''
   })
 
   const { register } = useAuth()
+  const [universityFaculties, setUniversityFaculties] = useState([])
+  const [universityInstitutions, setUniversityInstitutions] = useState([])
 
-  const faculties = [
-    'FILMMAKING AND VIDEO PRODUCTION',
-    'MULTIMEDIA PRODUCTION',
-    'COLOR GRADING',
-    'AI FILMMAKING',
-    'VIBE CODING'
-  ]
+  useEffect(() => {
+    const unsubFaculties = onSnapshot(query(collection(db, 'faculties'), orderBy('name')), (snapshot) => {
+      const list = snapshot.docs.map(doc => doc.data().name)
+      setUniversityFaculties(list)
+      if (list.length > 0 && !formData.faculty) {
+        setFormData(prev => ({ ...prev, faculty: list[0] }))
+      }
+    })
+    const unsubInstitutions = onSnapshot(query(collection(db, 'institutions'), orderBy('name')), (snapshot) => {
+      const list = snapshot.docs.map(doc => doc.data().name)
+      setUniversityInstitutions(list)
+      if (list.length > 0 && !formData.institution) {
+        setFormData(prev => ({ ...prev, institution: list[0] }))
+      }
+    })
 
-  const institutions = [
-    'NAD CLASS',
-    'KSP RWANDA',
-    'NAD PRODUCTION'
-  ]
+    return () => {
+      unsubFaculties()
+      unsubInstitutions()
+    }
+  }, [])
+
+
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -195,7 +210,11 @@ export default function Register() {
                               className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 focus:outline-none focus:border-accent transition-colors appearance-none"
                               value={formData.faculty} onChange={(e) => setFormData({...formData, faculty: e.target.value})}
                             >
-                              {faculties.map(f => <option key={f} value={f} className="bg-background">{f}</option>)}
+                              {universityFaculties.length > 0 ? (
+                                universityFaculties.map(f => <option key={f} value={f} className="bg-background">{f}</option>)
+                              ) : (
+                                <option disabled className="bg-background">Loading Faculties...</option>
+                              )}
                             </select>
                          </div>
                        </div>
@@ -207,7 +226,11 @@ export default function Register() {
                               className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 focus:outline-none focus:border-accent transition-colors appearance-none"
                               value={formData.institution} onChange={(e) => setFormData({...formData, institution: e.target.value})}
                             >
-                              {institutions.map(i => <option key={i} value={i} className="bg-background">{i}</option>)}
+                              {universityInstitutions.length > 0 ? (
+                                universityInstitutions.map(i => <option key={i} value={i} className="bg-background">{i}</option>)
+                              ) : (
+                                <option disabled className="bg-background">Loading Institutions...</option>
+                              )}
                             </select>
                          </div>
                        </div>

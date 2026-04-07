@@ -11,6 +11,7 @@ import { BrandingProvider } from './context/BrandingContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import TraineeManager from './pages/admin/TraineeManager'
 import MaterialsManager from './pages/admin/MaterialsManager'
+import UniversityManager from './pages/admin/UniversityManager'
 
 function App() {
   return (
@@ -30,8 +31,10 @@ function App() {
             <Route path="admins" element={<AdminManager />} />
             <Route path="marks" element={<MarksManager />} />
             <Route path="materials" element={<MaterialsManager />} />
+            <Route path="university" element={<UniversityManager />} />
             <Route path="content" element={<ContentManager />} />
           </Route>
+
           <Route path="*" element={<AdminLogin />} />
         </Routes>
       </BrandingProvider>

@@ -26,6 +26,8 @@ export default function MaterialsManager() {
   const [loading, setLoading] = useState(true)
   const [activeCourse, setActiveCourse] = useState(null)
   const [isEditing, setIsEditing] = useState(false)
+  const [universityFaculties, setUniversityFaculties] = useState([])
+
 
   // Form State
   const [formData, setFormData] = useState({
@@ -36,6 +38,11 @@ export default function MaterialsManager() {
   })
 
   useEffect(() => {
+    const unsubFaculties = onSnapshot(collection(db, 'faculties'), (snapshot) => {
+      const list = snapshot.docs.map(doc => doc.data().name).sort()
+      setUniversityFaculties(list)
+    })
+
     // Wait for userData if not Master
     if (!isMaster && !userData?.faculty) return
 
@@ -52,8 +59,12 @@ export default function MaterialsManager() {
       setLoading(false)
     })
 
-    return unsubscribe
+    return () => {
+      unsubFaculties()
+      unsubscribe()
+    }
   }, [isMaster, userData?.faculty])
+
 
   const handleCreateNew = () => {
     setFormData({
@@ -188,7 +199,7 @@ export default function MaterialsManager() {
                   <div className="space-y-4">
                     <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Assigned Faculties (Multiple Allowed)</label>
                     <div className="grid grid-cols-2 gap-2">
-                      {['FILMMAKING AND VIDEO PRODUCTION', 'MULTIMEDIA PRODUCTION', 'COLOR GRADING', 'AI FILMMAKING', 'VIBE CODING'].map(f => (
+                      {(universityFaculties.length > 0 ? universityFaculties : ['FILMMAKING AND VIDEO PRODUCTION', 'MULTIMEDIA PRODUCTION', 'COLOR GRADING', 'AI FILMMAKING', 'VIBE CODING']).map(f => (
                         <button 
                           key={f}
                           type="button"
@@ -206,6 +217,7 @@ export default function MaterialsManager() {
                       ))}
                     </div>
                   </div>
+
 
                </div>
                <div className="space-y-2">

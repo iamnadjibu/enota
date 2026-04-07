@@ -64,6 +64,17 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isMaster();
     }
+    // Global University Configurations
+    match /faculties/{facultyId} {
+      allow read: if true;
+      allow write: if isMaster();
+    }
+
+    match /institutions/{instId} {
+      allow read: if true;
+      allow write: if isMaster();
+    }
   }
 }
+
 
