@@ -1,6 +1,6 @@
-import React from 'react'
-import { motion } from 'framer-motion'
-import { ArrowRight, Play, Award, Users, BookOpen, Film } from 'lucide-react'
+import React, { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { ArrowRight, Play, Award, Users, BookOpen, Film, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import PublicLayout from '../../layouts/PublicLayout'
 import { useBranding } from '../../context/BrandingContext'
@@ -13,6 +13,8 @@ const fadeInUp = {
 
 export default function Home() {
   const { branding } = useBranding()
+  const [showDemoModal, setShowDemoModal] = useState(false)
+
   const stats = [
     { label: 'Trainees', value: '500+', icon: <Users size={20} className="text-secondary" /> },
     { label: 'Courses', value: '12+', icon: <Film size={20} className="text-secondary" /> },
@@ -68,7 +70,10 @@ export default function Home() {
             <Link to="/marks" className="btn-primary flex items-center justify-center gap-2 px-8 py-4 text-lg w-full sm:w-auto">
               Get Started <ArrowRight size={20} />
             </Link>
-            <button className="flex items-center gap-3 text-white/80 hover:text-white transition-colors group">
+            <button 
+              onClick={() => setShowDemoModal(true)}
+              className="flex items-center gap-3 text-white/80 hover:text-white transition-colors group"
+            >
               <span className="w-12 h-12 rounded-full glass flex items-center justify-center group-hover:bg-white/10 transition-colors">
                 <Play size={20} className="fill-white" />
               </span>
@@ -138,11 +143,12 @@ export default function Home() {
                 initial={{ opacity: 0, scale: 0.9 }}
                 whileInView={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.8 }}
-                className="relative aspect-video rounded-3xl overflow-hidden glass border-2 border-white/5 group shadow-2xl"
+                onClick={() => setShowDemoModal(true)}
+                className="relative aspect-video rounded-3xl overflow-hidden glass border-2 border-white/5 group shadow-2xl cursor-pointer"
               >
                 <div className="absolute inset-0 bg-gradient-to-tr from-primary/40 to-transparent"></div>
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-20 h-20 rounded-full bg-accent/20 border border-accent/40 backdrop-blur-xl flex items-center justify-center text-accent group-hover:scale-110 transition-transform cursor-pointer">
+                  <div className="w-20 h-20 rounded-full bg-accent/20 border border-accent/40 backdrop-blur-xl flex items-center justify-center text-accent group-hover:scale-110 transition-transform">
                     <Play size={40} className="fill-accent ml-2" />
                   </div>
                 </div>
@@ -151,13 +157,48 @@ export default function Home() {
                     <p className="text-accent text-[10px] uppercase tracking-widest font-bold mb-1">Live Demo</p>
                     <p className="text-sm font-medium">How to use eNOTA Marks Portal</p>
                   </div>
-                  <ArrowRight size={20} className="text-white/60" />
+                  <ArrowRight size={20} className="text-white/60 group-hover:translate-x-2 transition-transform" />
                 </div>
               </motion.div>
             </div>
           </div>
         </section>
       </div>
+
+      {/* Video Modal */}
+      <AnimatePresence>
+        {showDemoModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 sm:p-10"
+            onClick={() => setShowDemoModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="relative w-full max-w-5xl aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-white/10 glass"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button 
+                onClick={() => setShowDemoModal(false)}
+                className="absolute top-4 right-4 z-10 w-10 h-10 bg-black/50 hover:bg-red-500/80 text-white rounded-full flex items-center justify-center transition-colors backdrop-blur-md"
+              >
+                <X size={20} />
+              </button>
+              <iframe 
+                src="https://drive.google.com/file/d/1HfpuHCE5AouDavfyJ12IgHmD_kK3DgRc/preview" 
+                className="w-full h-full border-0"
+                allow="autoplay"
+                allowFullScreen
+              ></iframe>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </PublicLayout>
   )
 }

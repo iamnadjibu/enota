@@ -14,7 +14,8 @@ import {
   Edit3,
   Dna,
   Link as LinkIcon,
-  Eye
+  Eye,
+  Youtube
 } from 'lucide-react'
 import { db } from '../../firebase'
 import { collection, query, onSnapshot, doc, setDoc, deleteDoc, where } from 'firebase/firestore'
@@ -102,7 +103,7 @@ export default function MaterialsManager() {
   }
 
   const handleAddContent = (unitIdx, type) => {
-    const newContent = { id: Date.now(), title: '', description: '', driveLink: '' }
+    const newContent = { id: Date.now(), title: '', description: '', driveLink: '', youtubeLink: '' }
     const updatedUnits = [...formData.units]
     updatedUnits[unitIdx][type] = [...updatedUnits[unitIdx][type], newContent]
     setFormData({ ...formData, units: updatedUnits })
@@ -309,14 +310,25 @@ export default function MaterialsManager() {
                                         className="w-full bg-transparent border-none text-[10px] text-white/40 focus:outline-none resize-none"
                                         value={c.description} onChange={(e) => handleUpdateContent(uIdx, item.type, cIdx, 'description', e.target.value)}
                                        />
-                                       <div className="flex items-center gap-2 bg-white/5 rounded-lg px-2 py-1.5 focus-within:bg-white/10 transition-colors">
-                                          <LinkIcon size={10} className="text-white/20"/>
-                                          <input 
-                                            placeholder="Direct Drive Link (Handout)..."
-                                            className="w-full bg-transparent border-none text-[9px] focus:outline-none text-accent"
-                                            value={c.driveLink} onChange={(e) => handleUpdateContent(uIdx, item.type, cIdx, 'driveLink', e.target.value)}
-                                          />
-                                          {getDrivePreview(c.driveLink) && <Eye size={10} className="text-accent" />}
+                                       <div className="flex flex-col gap-2">
+                                         <div className="flex items-center gap-2 bg-white/5 rounded-lg px-2 py-1.5 focus-within:bg-white/10 transition-colors">
+                                            <LinkIcon size={10} className="text-white/20"/>
+                                            <input 
+                                              placeholder="Direct Drive Link (Handout)..."
+                                              className="w-full bg-transparent border-none text-[9px] focus:outline-none text-accent"
+                                              value={c.driveLink || ''} onChange={(e) => handleUpdateContent(uIdx, item.type, cIdx, 'driveLink', e.target.value)}
+                                            />
+                                            {getDrivePreview(c.driveLink) && <Eye size={10} className="text-accent" />}
+                                         </div>
+                                         <div className="flex items-center gap-2 bg-white/5 rounded-lg px-2 py-1.5 focus-within:bg-white/10 transition-colors">
+                                            <Youtube size={10} className="text-white/20"/>
+                                            <input 
+                                              placeholder="YouTube Link (Optional)..."
+                                              className="w-full bg-transparent border-none text-[9px] focus:outline-none text-red-400"
+                                              value={c.youtubeLink || ''} onChange={(e) => handleUpdateContent(uIdx, item.type, cIdx, 'youtubeLink', e.target.value)}
+                                            />
+                                            {c.youtubeLink && <Eye size={10} className="text-red-400" />}
+                                         </div>
                                        </div>
                                     </div>
                                   ))}

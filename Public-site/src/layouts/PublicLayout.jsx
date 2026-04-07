@@ -3,19 +3,36 @@ import { Link, useLocation } from 'react-router-dom'
 import { Menu, X, Instagram, Youtube, Twitter, MessageCircle, Mail, MapPin } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useBranding } from '../context/BrandingContext'
+import { doc, onSnapshot } from 'firebase/firestore'
+import { db } from '../../firebase'
 
 export default function PublicLayout({ children }) {
   const { branding, loading } = useBranding()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const location = useLocation()
+  const [dynamicNav, setDynamicNav] = useState([])
 
-  const navLinks = [
-    { name: 'HOME', path: '/' },
-    { name: 'MATERIALS', path: '/materials' },
-    { name: 'MARKS', path: '/marks' },
-    { name: 'ABOUT US', path: '/about' },
-    { name: 'CONTACT US', path: '/contact' },
-  ]
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'siteConfig', 'navigation'), (docSnap) => {
+      if (docSnap.exists() && docSnap.data().links?.length > 0) {
+        setDynamicNav(docSnap.data().links)
+      } else {
+        setDynamicNav([
+          { name: 'HOME', path: '/' },
+          { name: 'MATERIALS', path: '/materials' },
+          { name: 'MARKS', path: '/marks' },
+          { name: 'ABOUT US', path: '/about' },
+          { name: 'CONTACT US', path: '/contact' },
+        ])
+      }
+    })
+    return () => unsub()
+  }, [])
+
+  // Ensure HOME is prominently featured if not configured otherwise
+  const navLinks = dynamicNav.find(l => l.path === '/') 
+        ? dynamicNav 
+        : [{ name: 'HOME', path: '/' }, ...dynamicNav]
 
   const socialLinks = [
     { icon: <Instagram size={20} />, url: 'https://www.instagram.com/iamnad_/' },
@@ -47,14 +64,26 @@ export default function PublicLayout({ children }) {
 
         {/* Desktop Links */}
         <div className="hidden lg:flex items-center gap-8">
-          {navLinks.slice(1).map((link) => (
-            <Link
-              key={link.name}
-              to={link.path}
-              className={`text-sm font-bold tracking-widest hover:text-accent transition-colors ${location.pathname === link.path ? 'text-accent border-b-2 border-accent pb-1' : 'text-white/80'}`}
-            >
-              {link.name}
-            </Link>
+          {navLinks.map((link) => (
+            link.path.startsWith('http') ? (
+              <a 
+                key={link.name} 
+                href={link.path} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-sm font-bold tracking-widest text-white/80 hover:text-accent transition-colors"
+              >
+                {link.name}
+              </a>
+            ) : (
+              <Link
+                key={link.name}
+                to={link.path}
+                className={`text-sm font-bold tracking-widest hover:text-accent transition-colors ${location.pathname === link.path ? 'text-accent border-b-2 border-accent pb-1' : 'text-white/80'}`}
+              >
+                {link.name}
+              </Link>
+            )
           ))}
           <Link to="/register" className="btn-primary py-2 text-sm px-6">JOIN SYSTEM</Link>
         </div>
@@ -76,14 +105,27 @@ export default function PublicLayout({ children }) {
             className="fixed inset-0 z-40 bg-background/95 backdrop-blur-xl flex flex-col items-center justify-center gap-8 lg:hidden"
           >
             {navLinks.map((link) => (
-              <Link
-                key={link.name}
-                to={link.path}
-                onClick={() => setIsMenuOpen(false)}
-                className={`text-3xl font-display font-bold hover:text-accent transition-colors ${location.pathname === link.path ? 'text-accent' : 'text-white'}`}
-              >
-                {link.name}
-              </Link>
+              link.path.startsWith('http') ? (
+                <a
+                  key={link.name}
+                  href={link.path}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="text-3xl font-display font-bold text-white hover:text-accent transition-colors"
+                >
+                  {link.name}
+                </a>
+              ) : (
+                <Link
+                  key={link.name}
+                  to={link.path}
+                  onClick={() => setIsMenuOpen(false)}
+                  className={`text-3xl font-display font-bold hover:text-accent transition-colors ${location.pathname === link.path ? 'text-accent' : 'text-white'}`}
+                >
+                  {link.name}
+                </Link>
+              )
             ))}
             <Link to="/register" onClick={() => setIsMenuOpen(false)} className="btn-primary mt-4 px-12 py-4">JOIN SYSTEM</Link>
           </motion.div>

@@ -6,7 +6,7 @@ export default function ProtectedRoute({ children, adminOnly = true }) {
   const { currentUser, isAdmin, isApproved } = useAuth()
 
   if (!currentUser) {
-    return <Navigate to="/admin/login" />
+    return <Navigate to="/login" />
   }
 
   if (adminOnly && !isAdmin) {

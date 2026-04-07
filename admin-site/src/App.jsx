@@ -12,6 +12,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import TraineeManager from './pages/admin/TraineeManager'
 import MaterialsManager from './pages/admin/MaterialsManager'
 import UniversityManager from './pages/admin/UniversityManager'
+import NavigationManager from './pages/admin/NavigationManager'
 
 function App() {
   return (
@@ -32,6 +33,7 @@ function App() {
             <Route path="marks" element={<MarksManager />} />
             <Route path="materials" element={<MaterialsManager />} />
             <Route path="university" element={<UniversityManager />} />
+            <Route path="navigation" element={<NavigationManager />} />
             <Route path="content" element={<ContentManager />} />
           </Route>
 

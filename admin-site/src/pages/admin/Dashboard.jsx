@@ -1,30 +1,36 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Users, GraduationCap, Award, TrendingUp, BarChart3, PieChart as PieChartIcon, ChevronRight } from 'lucide-react'
-import { collection, query, getDocs, where } from 'firebase/firestore'
+import { Users, GraduationCap, Award, TrendingUp, BarChart3, PieChart as PieChartIcon, ChevronRight, ChevronDown } from 'lucide-react'
+import { collection, query, getDocs, where, onSnapshot } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../context/AuthContext'
+import { useNavigate } from 'react-router-dom'
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line
 } from 'recharts'
 
 export default function Dashboard() {
   const { userData, isMaster } = useAuth()
-  const [stats, setStats] = useState({
-    totalStudents: 0,
-    averageGrade: 'N/A',
-    topFaculty: 'N/A',
-    passingRate: 0
-  })
-  const [chartData, setChartData] = useState([])
-  const [genderData, setGenderData] = useState([])
+  const navigate = useNavigate()
+  const [rawMarks, setRawMarks] = useState([])
+  const [faculties, setFaculties] = useState([])
   const [loading, setLoading] = useState(true)
   const [expandedFaculty, setExpandedFaculty] = useState(null)
+  
+  // Master Admin can select 'All' or a specific faculty
+  const [selectedFacultyFilter, setSelectedFacultyFilter] = useState('All')
+
+  useEffect(() => {
+    // Fetch dynamic faculties list
+    const unsubFaculties = onSnapshot(collection(db, 'faculties'), (snapshot) => {
+      setFaculties(snapshot.docs.map(doc => doc.data().name).sort())
+    })
+    return () => unsubFaculties()
+  }, [])
 
   useEffect(() => {
     const fetchData = async () => {
-      // Wait for userData if not Master
       if (!isMaster && !userData?.faculty) {
         setLoading(false)
         return
@@ -35,44 +41,13 @@ export default function Dashboard() {
         const marksRef = collection(db, 'marks')
         let q = marksRef
         
-        // If not master, filter by faculty
+        // Non-masters only get their faculty's data
         if (!isMaster && userData?.faculty && userData.faculty !== 'N/A') {
           q = query(marksRef, where('faculty', '==', userData.faculty))
         }
 
         const querySnapshot = await getDocs(q)
-        const data = querySnapshot.docs.map(doc => doc.data())
-
-        // Calculate Stats
-        if (data.length > 0) {
-          const total = data.length
-          const avg = (data.reduce((acc, curr) => acc + (parseFloat(curr.averageMarks) || 0), 0) / total).toFixed(2)
-          const passing = (data.filter(d => parseFloat(d.averageMarks) >= 50).length / total * 100).toFixed(0)
-
-          setStats({
-            totalStudents: total,
-            averageGrade: `${avg}%`,
-            topFaculty: userData?.faculty || 'All Faculties',
-            passingRate: `${passing}%`
-          })
-
-          // Chart Data (Course Averages)
-          const courseAvgs = [
-            { name: 'Filmmaking', value: parseFloat((data.reduce((acc, curr) => acc + (parseFloat(curr.filmmakingMarks) || 0), 0) / total).toFixed(1)) || 0 },
-            { name: 'Camera Op', value: parseFloat((data.reduce((acc, curr) => acc + (parseFloat(curr.cameraOperationMarks) || 0), 0) / total).toFixed(1)) || 0 },
-            { name: 'Video Editing', value: parseFloat((data.reduce((acc, curr) => acc + (parseFloat(curr.videoEditingMarks) || 0), 0) / total).toFixed(1)) || 0 },
-          ]
-          setChartData(courseAvgs)
-
-          // Gender Performance
-          const maleMarks = data.filter(d => d.gender === 'Male')
-          const femaleMarks = data.filter(d => d.gender === 'Female')
-          
-          setGenderData([
-            { name: 'Male', value: maleMarks.length > 0 ? parseFloat((maleMarks.reduce((acc, curr) => acc + (parseFloat(curr.averageMarks) || 0), 0) / maleMarks.length).toFixed(1)) : 0 },
-            { name: 'Female', value: femaleMarks.length > 0 ? parseFloat((femaleMarks.reduce((acc, curr) => acc + (parseFloat(curr.averageMarks) || 0), 0) / femaleMarks.length).toFixed(1)) : 0 }
-          ])
-        }
+        setRawMarks(querySnapshot.docs.map(doc => doc.data()))
       } catch (err) {
         console.error("Dashboard error:", err)
       } finally {
@@ -83,14 +58,84 @@ export default function Dashboard() {
     fetchData()
   }, [isMaster, userData?.faculty])
 
-  const COLORS = ['#285A48', '#408A71', '#B0E4CC', '#091413']
+  // Filter marks based on the selected dropdown
+  const filteredMarks = useMemo(() => {
+    if (selectedFacultyFilter === 'All') return rawMarks
+    return rawMarks.filter(mark => mark.faculty === selectedFacultyFilter)
+  }, [rawMarks, selectedFacultyFilter])
+
+  // Global Stats based on filter
+  const stats = useMemo(() => {
+    if (filteredMarks.length === 0) return { totalStudents: 0, averageGrade: 'N/A', topFaculty: selectedFacultyFilter, passingRate: '0%' }
+    
+    const total = filteredMarks.length
+    const avg = (filteredMarks.reduce((acc, curr) => acc + (parseFloat(curr.averageMarks) || 0), 0) / total).toFixed(2)
+    const passing = (filteredMarks.filter(d => parseFloat(d.averageMarks) >= 50).length / total * 100).toFixed(0)
+
+    return {
+      totalStudents: total,
+      averageGrade: `${avg}%`,
+      topFaculty: selectedFacultyFilter === 'All' ? 'All Faculties' : selectedFacultyFilter,
+      passingRate: `${passing}%`
+    }
+  }, [filteredMarks, selectedFacultyFilter])
+
+  // Chart Data
+  const chartData = useMemo(() => {
+    if (filteredMarks.length === 0) return []
+    // Dynamically calculate averages for all courses present in the dataset
+    const courseTotals = {}
+    const courseCounts = {}
+    
+    filteredMarks.forEach(student => {
+      if (student.marks) {
+        Object.entries(student.marks).forEach(([course, mark]) => {
+          const val = parseFloat(mark) || 0
+          courseTotals[course] = (courseTotals[course] || 0) + val
+          courseCounts[course] = (courseCounts[course] || 0) + 1
+        })
+      }
+    })
+
+    return Object.keys(courseTotals).map(course => ({
+      name: course.length > 15 ? course.substring(0, 15) + '...' : course,
+      value: parseFloat((courseTotals[course] / courseCounts[course]).toFixed(1))
+    }))
+  }, [filteredMarks])
+
+  // Gender Data
+  const genderData = useMemo(() => {
+    const maleMarks = filteredMarks.filter(d => d.gender === 'Male')
+    const femaleMarks = filteredMarks.filter(d => d.gender === 'Female')
+    
+    return [
+      { name: 'Male', value: maleMarks.length > 0 ? parseFloat((maleMarks.reduce((acc, curr) => acc + (parseFloat(curr.averageMarks) || 0), 0) / maleMarks.length).toFixed(1)) : 0 },
+      { name: 'Female', value: femaleMarks.length > 0 ? parseFloat((femaleMarks.reduce((acc, curr) => acc + (parseFloat(curr.averageMarks) || 0), 0) / femaleMarks.length).toFixed(1)) : 0 }
+    ]
+  }, [filteredMarks])
+
+
+  // Helper to get stats for a specific faculty (for the accordion menu)
+  const getFacultyStats = (facultyName) => {
+    const data = rawMarks.filter(m => m.faculty === facultyName)
+    if (data.length === 0) return { avg: 'N/A', count: 0, pass: 'N/A' }
+    
+    const total = data.length
+    const avg = (data.reduce((acc, curr) => acc + (parseFloat(curr.averageMarks) || 0), 0) / total).toFixed(1)
+    const passing = (data.filter(d => parseFloat(d.averageMarks) >= 50).length / total * 100).toFixed(0)
+    
+    return { avg: `${avg}%`, count: total, pass: `${passing}%` }
+  }
+
 
   const statCards = [
-    { label: 'Registered Students', value: stats.totalStudents, icon: <Users className="text-accent" />, trend: '+12% from last month' },
-    { label: 'Global Average Marks', value: stats.averageGrade, icon: <GraduationCap className="text-secondary" />, trend: 'Stable' },
-    { label: 'Passing Rate', value: stats.passingRate, icon: <Award className="text-accent" />, trend: 'Target: 95%' },
+    { label: 'Registered Students', value: stats.totalStudents, icon: <Users className="text-accent" />, trend: 'Active' },
+    { label: 'Average Marks', value: stats.averageGrade, icon: <GraduationCap className="text-secondary" />, trend: 'Overall Focus' },
+    { label: 'Passing Rate', value: stats.passingRate, icon: <Award className="text-accent" />, trend: 'Target: >50%' },
     { label: 'Active Faculty', value: stats.topFaculty, icon: <TrendingUp className="text-secondary" />, truncate: true },
   ]
+
+  if (loading) return <div className="p-20 text-center text-white/50 animate-pulse tracking-widest font-bold">Loading Analytics...</div>
 
   return (
     <div className="space-y-10">
@@ -99,9 +144,24 @@ export default function Dashboard() {
           <h1 className="text-3xl font-display font-bold">Welcome Back, {userData?.firstName}</h1>
           <p className="text-white/40 text-sm mt-1">Here's a summary of class performances today.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <button className="btn-outline py-2 px-4 text-xs font-bold uppercase tracking-widest">Generate Report</button>
-          <button className="btn-primary py-2 px-4 text-xs font-bold uppercase tracking-widest">Add New Mark</button>
+        <div className="flex items-center gap-4 flex-wrap">
+          {isMaster && (
+            <div className="relative">
+              <select 
+                className="appearance-none bg-white/5 border border-white/10 rounded-2xl py-3 pl-4 pr-10 text-sm font-bold text-accent focus:outline-none focus:border-accent cursor-pointer"
+                value={selectedFacultyFilter}
+                onChange={(e) => setSelectedFacultyFilter(e.target.value)}
+              >
+                <option value="All" className="bg-background text-white">All Faculties</option>
+                {faculties.map(f => (
+                  <option key={f} value={f} className="bg-background text-white">{f}</option>
+                ))}
+              </select>
+              <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-accent pointer-events-none" />
+            </div>
+          )}
+          <button onClick={() => navigate('/marks')} className="btn-outline py-3 px-6 text-xs font-bold uppercase tracking-widest">Generate Report</button>
+          <button onClick={() => navigate('/marks')} className="btn-primary py-3 px-6 text-xs font-bold uppercase tracking-widest">Manage Marks</button>
         </div>
       </div>
 
@@ -141,14 +201,14 @@ export default function Dashboard() {
               <h4 className="text-lg font-bold flex items-center gap-2">
                 <BarChart3 className="text-accent" size={20} /> Course Performance
               </h4>
-              <p className="text-white/40 text-xs mt-1">Average marks across major modules</p>
+              <p className="text-white/40 text-xs mt-1">Average marks across active modules</p>
             </div>
           </div>
           <div className="flex-grow">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
-                <XAxis dataKey="name" stroke="#ffffff40" fontSize={12} tickLine={false} axisLine={false} />
+                <XAxis dataKey="name" stroke="#ffffff40" fontSize={10} tickLine={false} axisLine={false} />
                 <YAxis stroke="#ffffff40" fontSize={12} tickLine={false} axisLine={false} domain={[0, 100]} />
                 <Tooltip 
                   cursor={{ fill: '#ffffff05' }}
@@ -192,15 +252,17 @@ export default function Dashboard() {
         </motion.div>
       </div>
 
-      {/* Faculty Data Dropdown (Master Admin Only) */}
-      <div className="glass p-8 rounded-[40px] border border-white/5">
+      {/* Faculty Data Dropdown */}
+      <div className="glass p-8 rounded-[40px] border border-white/5 text-left">
          <div className="flex items-center justify-between mb-6">
-            <h4 className="text-lg font-bold">Faculty Analytics</h4>
+            <h4 className="text-lg font-bold">Faculty Analytics Comparison</h4>
             {!isMaster && <span className="text-[10px] bg-white/5 px-2 py-1 rounded text-white/40 uppercase tracking-widest">My Faculty Only</span>}
          </div>
          <div className="space-y-4">
-            {['FILMMAKING AND VIDEO PRODUCTION', 'MULTIMEDIA PRODUCTION', 'COLOR GRADING', 'AI FILMMAKING', 'VIBE CODING'].map((faculty, i) => (
-              (!isMaster && faculty !== userData?.faculty) ? null : (
+            {(isMaster ? faculties : [userData?.faculty]).map((faculty, i) => {
+              if (!faculty) return null
+              const fStats = getFacultyStats(faculty)
+              return (
                 <div key={i} className="space-y-2">
                   <div 
                     onClick={() => setExpandedFaculty(expandedFaculty === faculty ? null : faculty)}
@@ -210,8 +272,8 @@ export default function Dashboard() {
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${expandedFaculty === faculty ? 'bg-accent text-background' : 'bg-primary/20 text-accent'}`}>
                         <GraduationCap size={20} />
                       </div>
-                      <div>
-                        <h5 className="font-bold text-sm">{faculty}</h5>
+                      <div className="text-left">
+                        <h5 className="font-bold text-sm text-left">{faculty}</h5>
                         <p className="text-[10px] text-white/40 uppercase tracking-widest">Performance Insights</p>
                       </div>
                     </div>
@@ -238,15 +300,15 @@ export default function Dashboard() {
                         <div className="p-6 bg-white/[0.02] border border-white/5 rounded-2xl mx-2 mb-4 grid sm:grid-cols-3 gap-6">
                            <div className="space-y-1">
                               <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Average Mark</p>
-                              <p className="text-xl font-bold text-accent">84.2%</p>
+                              <p className="text-xl font-bold text-accent">{fStats.avg}</p>
                            </div>
                            <div className="space-y-1">
                               <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Total Trainees</p>
-                              <p className="text-xl font-bold text-white">42</p>
+                              <p className="text-xl font-bold text-white">{fStats.count}</p>
                            </div>
                            <div className="space-y-1">
                               <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Pass Rate</p>
-                              <p className="text-xl font-bold text-secondary">92%</p>
+                              <p className="text-xl font-bold text-secondary">{fStats.pass}</p>
                            </div>
                         </div>
                       </motion.div>
@@ -254,7 +316,7 @@ export default function Dashboard() {
                   </AnimatePresence>
                 </div>
               )
-            ))}
+            })}
          </div>
       </div>
     </div>

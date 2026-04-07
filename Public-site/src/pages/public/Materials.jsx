@@ -67,6 +67,12 @@ export default function Materials() {
     return id ? `https://drive.google.com/file/d/${id}/preview` : null
   }
 
+  const getYoutubePreview = (url) => {
+    if (!url) return null
+    const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)
+    return match ? `https://www.youtube.com/embed/${match[1]}?autoplay=1` : null
+  }
+
   return (
     <PublicLayout>
       <div className="max-w-7xl mx-auto px-6 lg:px-12 py-20 min-h-[80vh]">
@@ -166,7 +172,7 @@ export default function Materials() {
                                            <button 
                                             key={iIdx}
                                             onClick={() => setPreviewItem({ ...item, catLabel: cat.label })}
-                                            className={`w-full text-left p-2.5 rounded-lg text-[11px] font-medium flex items-center justify-between group transition-colors ${previewItem?.driveLink === item.driveLink ? 'text-accent bg-accent/5' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
+                                            className={`w-full text-left p-2.5 rounded-lg text-[11px] font-medium flex items-center justify-between group transition-colors ${previewItem?.id === item.id ? 'text-accent bg-accent/5' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
                                            >
                                               <span className="flex items-center gap-2">
                                                  {cat.icon}
@@ -198,7 +204,7 @@ export default function Materials() {
                   <AnimatePresence mode="wait">
                     {previewItem ? (
                       <motion.div 
-                        key={previewItem.driveLink}
+                        key={previewItem.id}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -20 }}
@@ -218,7 +224,15 @@ export default function Materials() {
                          </div>
                          
                          <div className="flex-grow aspect-video bg-black/40 relative">
-                            {getDrivePreview(previewItem.driveLink) ? (
+                            {getYoutubePreview(previewItem.youtubeLink) ? (
+                              <iframe 
+                                src={getYoutubePreview(previewItem.youtubeLink)} 
+                                className="w-full h-full border-none"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                                title="YouTube Viewer"
+                              ></iframe>
+                            ) : getDrivePreview(previewItem.driveLink) ? (
                               <iframe 
                                 src={getDrivePreview(previewItem.driveLink)} 
                                 className="w-full h-full border-none"
@@ -229,7 +243,7 @@ export default function Materials() {
                               <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-10">
                                  <ExternalLink size={48} className="text-white/10 mb-4" />
                                  <p className="text-white/40 mb-6">This content cannot be previewed directly.</p>
-                                 <a href={previewItem.driveLink} target="_blank" rel="noopener noreferrer" className="btn-primary py-3 px-8 text-xs">Open in New Tab</a>
+                                 <a href={previewItem.youtubeLink || previewItem.driveLink} target="_blank" rel="noopener noreferrer" className="btn-primary py-3 px-8 text-xs">Open in New Tab</a>
                               </div>
                             )}
                          </div>

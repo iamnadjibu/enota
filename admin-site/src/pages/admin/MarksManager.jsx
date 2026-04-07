@@ -32,6 +32,19 @@ export default function MarksManager() {
   const [universityFaculties, setUniversityFaculties] = useState([])
   const [universityInstitutions, setUniversityInstitutions] = useState([])
 
+  // Report Generation State
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false)
+  const [reportColumns, setReportColumns] = useState({
+    firstName: true,
+    lastName: true,
+    regNumber: true,
+    faculty: true,
+    institution: false,
+    gender: false,
+    coursesMarks: true,
+    averageMarks: true,
+    overallGrade: true
+  })
 
   // Form State
   const [formData, setFormData] = useState({
@@ -105,10 +118,65 @@ export default function MarksManager() {
       setAvailableCourses(uniqueCourses)
     })
 
-
     return unsubscribe
   }, [formData.faculty])
 
+
+  // Report Generation Logic
+  const handlePrintPDF = () => {
+    window.print() 
+    setIsReportModalOpen(false)
+  }
+
+  const handleExportCSV = () => {
+    const headers = []
+    if (reportColumns.firstName) headers.push('First Name')
+    if (reportColumns.lastName) headers.push('Last Name')
+    if (reportColumns.regNumber) headers.push('Reg Number')
+    if (reportColumns.faculty) headers.push('Faculty')
+    if (reportColumns.institution) headers.push('Institution')
+    if (reportColumns.gender) headers.push('Gender')
+    
+    // Extrapolate dynamic course columns
+    const allCoursesInView = new Set()
+    if (reportColumns.coursesMarks) {
+      filteredMarks.forEach(m => Object.keys(m.marks || {}).forEach(c => allCoursesInView.add(c)))
+      allCoursesInView.forEach(c => headers.push(c))
+    }
+    
+    if (reportColumns.averageMarks) headers.push('Average %')
+    if (reportColumns.overallGrade) headers.push('Grade')
+
+    const rows = filteredMarks.map(mark => {
+      const row = []
+      if (reportColumns.firstName) row.push(`"${mark.firstName || ''}"`)
+      if (reportColumns.lastName) row.push(`"${mark.lastName || ''}"`)
+      if (reportColumns.regNumber) row.push(`"${mark.regNumber || ''}"`)
+      if (reportColumns.faculty) row.push(`"${mark.faculty || ''}"`)
+      if (reportColumns.institution) row.push(`"${mark.institution || ''}"`)
+      if (reportColumns.gender) row.push(`"${mark.gender || ''}"`)
+      
+      if (reportColumns.coursesMarks) {
+        allCoursesInView.forEach(c => row.push(`"${mark.marks?.[c] || '0'}"`))
+      }
+      
+      if (reportColumns.averageMarks) row.push(`"${mark.averageMarks || '0'}"`)
+      if (reportColumns.overallGrade) row.push(`"${mark.overallGrade || 'F'}"`)
+      
+      return row.join(',')
+    })
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n')
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement("a")
+    link.setAttribute("href", encodedUri)
+    link.setAttribute("download", `eNOTA_Report_${new Date().toISOString().slice(0,10)}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    setIsReportModalOpen(false)
+  }
 
   const handleSave = async (e) => {
     e.preventDefault()
@@ -362,6 +430,13 @@ export default function MarksManager() {
           >
             <Plus size={18} /> Add Student
           </button>
+          
+          <button 
+            onClick={() => setIsReportModalOpen(true)}
+            className="btn-outline flex items-center gap-2 bg-white/5 hover:bg-white/10"
+          >
+            <FileSpreadsheet size={18} /> Generate Report
+          </button>
 
         </div>
       </div>
@@ -446,6 +521,64 @@ export default function MarksManager() {
           </tbody>
         </table>
       </div>
+
+      {/* Report Generation Modal */}
+      <AnimatePresence>
+        {isReportModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsReportModalOpen(false)}
+              className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+            ></motion.div>
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-xl glass p-10 rounded-[40px] border border-white/5 shadow-2xl overflow-y-auto max-h-[90vh]"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                   <h3 className="text-2xl font-display font-bold text-accent">Custom Report Generator</h3>
+                   <p className="text-xs text-white/40 mt-1">Select columns to include in your export.</p>
+                </div>
+                <button onClick={() => setIsReportModalOpen(false)} className="p-2 hover:bg-white/5 rounded-full text-white/40"><X size={24}/></button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-8">
+                {Object.keys(reportColumns).map(key => (
+                  <label key={key} className="flex items-center gap-3 p-3 bg-white/5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors border border-transparent hover:border-white/10">
+                    <input 
+                      type="checkbox" 
+                      className="accent-accent w-4 h-4 cursor-pointer"
+                      checked={reportColumns[key]}
+                      onChange={(e) => setReportColumns({...reportColumns, [key]: e.target.checked})}
+                    />
+                    <span className="text-sm font-bold text-white/80">{key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}</span>
+                  </label>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-4 pt-6 border-t border-white/10">
+                <button 
+                  onClick={handleExportCSV}
+                  className="w-full btn-primary py-4 text-xs tracking-widest font-bold flex items-center justify-center gap-2"
+                >
+                   <Download size={18} /> EXCEL (CSV)
+                </button>
+                <button 
+                  onClick={handlePrintPDF}
+                  className="w-full btn-outline py-4 text-xs tracking-widest font-bold flex items-center justify-center gap-2"
+                >
+                   <FileSpreadsheet size={18} /> PRINT PDF
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Add/Edit Modal */}
       <AnimatePresence>
