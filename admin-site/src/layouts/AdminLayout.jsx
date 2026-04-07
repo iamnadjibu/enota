@@ -11,7 +11,8 @@ import {
   Bell, 
   Search,
   UserCircle,
-  BookOpen
+  BookOpen,
+  School
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useBranding } from '../context/BrandingContext'
