@@ -1,10 +1,10 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Menu, X, Instagram, Youtube, Twitter, MessageCircle, Mail, MapPin } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useBranding } from '../context/BrandingContext'
 import { doc, onSnapshot } from 'firebase/firestore'
-import { db } from '../../firebase'
+import { db } from '../firebase'
 
 export default function PublicLayout({ children }) {
   const { branding, loading } = useBranding()
