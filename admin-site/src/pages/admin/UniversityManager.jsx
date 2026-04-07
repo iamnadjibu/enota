@@ -166,7 +166,11 @@ export default function UniversityManager() {
                 </div>
                 <div>
                   <h3 className="font-bold text-lg">{item.name}</h3>
-                  <p className="text-[10px] text-white/20 uppercase font-bold tracking-widest">Added {item.createdAt?.toDate().toLocaleDateString() || 'Recently'}</p>
+                  <p className="text-[10px] text-white/20 uppercase font-bold tracking-widest">
+                    Added {item.createdAt ? (
+                      item.createdAt.toDate ? item.createdAt.toDate().toLocaleDateString() : new Date(item.createdAt).toLocaleDateString()
+                    ) : 'Recently'}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

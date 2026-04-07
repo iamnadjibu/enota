@@ -128,17 +128,18 @@ export default function Marks() {
         </form>
 
         <AnimatePresence mode="wait">
+          {error && (
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="space-y-8 mb-8"
+              className="bg-red-500/10 border border-red-500/20 p-6 rounded-2xl text-red-400 flex items-center gap-3 justify-center mb-8"
             >
-              <div className="bg-red-500/10 border border-red-500/20 p-6 rounded-2xl text-red-400 flex items-center gap-3 justify-center">
-                <AlertCircle size={24} /> {error}
-              </div>
+              <AlertCircle size={24} /> {error}
+            </motion.div>
+          )}
 
-              {showClaimForm && (
+          {showClaimForm && (
                 <motion.div 
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -213,12 +214,12 @@ export default function Marks() {
                   </form>
                 </motion.div>
               )}
-            </motion.div>
-
           {results.length > 0 && (
             <motion.div 
+              key="results"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
               className="space-y-16"
             >
               {results.map((studentData) => (
