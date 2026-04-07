@@ -187,7 +187,7 @@ export default function Materials() {
                   {courses.length === 0 && (
                     <div className="py-20 glass rounded-[40px] border border-white/5 text-center">
                        <BookOpen size={48} className="mx-auto text-white/10 mb-4" />
-                       <p className="text-white/40 text-sm">No courses assigned to your faculty yet.</p>
+                       <p className="text-white/40 text-sm">No Available materials at the moment.</p>
                     </div>
                   )}
                </div>

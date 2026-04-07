@@ -27,18 +27,28 @@ export default function MarksManager() {
   const [selectedMark, setSelectedMark] = useState(null)
   const [isSeeding, setIsSeeding] = useState(false)
 
+  // Faculty Course Mapping
+  const FACULTY_CONFIG = {
+    'MULTIMEDIA PRODUCTION': ['Filmmaking', 'Camera Operation'],
+    'FILMMAKING AND VIDEO PRODUCTION': ['Filmmaking', 'Camera Operation'],
+    'VIBE CODING': ['Frontend Development', 'Backend Development', 'UI/UX Design'],
+    'COLOR GRADING': ['Color Theory', 'DaVinci Resolve'],
+    'AI FILMMAKING': ['Prompt Engineering', 'AI Video Tools']
+  }
+
+  const DEFAULT_COURSES = ['Filmmaking', 'Camera Operation', 'Video Editing']
+
   // Form State
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
     regNumber: '',
-    faculty: '',
-    institution: '',
+    faculty: userData?.faculty || 'MULTIMEDIA PRODUCTION',
+    institution: 'NAD CLASS',
     gender: 'Male',
-    filmmakingMarks: 0,
-    cameraOperationMarks: 0,
-    videoEditingMarks: 0
+    marks: {} // { 'Filmmaking': 85, 'Camera Operation': 90 }
   })
+
 
   useEffect(() => {
     const marksRef = collection(db, 'marks')
@@ -76,18 +86,26 @@ export default function MarksManager() {
     e.preventDefault()
     setLoading(true)
 
-    const avg = ((parseFloat(formData.filmmakingMarks) + parseFloat(formData.cameraOperationMarks) + parseFloat(formData.videoEditingMarks)) / 3).toFixed(2)
+    const activeCourses = FACULTY_CONFIG[formData.faculty] || DEFAULT_COURSES
+    const marksValues = activeCourses.map(c => parseFloat(formData.marks[c] || 0))
+    const total = marksValues.reduce((a, b) => a + b, 0)
+    const avg = (total / activeCourses.length).toFixed(2)
     const overallGrade = calculateGrade(avg)
     
+    // Also include individual grades for legacy compatibility if needed
+    const individualGrades = {}
+    activeCourses.forEach(c => {
+      individualGrades[`grade${c.replace(/\s+/g, '')}`] = calculateGrade(formData.marks[c])
+    })
+
     const finalData = {
       ...formData,
       averageMarks: avg,
       overallGrade,
-      gradeFilmmaking: calculateGrade(formData.filmmakingMarks),
-      gradeCameraOperation: calculateGrade(formData.cameraOperationMarks),
-      gradeVideoEditing: calculateGrade(formData.videoEditingMarks),
+      ...individualGrades,
       updatedAt: new Date().toISOString()
     }
+
 
     try {
       if (selectedMark) {
@@ -98,9 +116,9 @@ export default function MarksManager() {
       setIsModalOpen(false)
       setSelectedMark(null)
       setFormData({
-        firstName: '', lastName: '', regNumber: '', faculty: userData?.faculty || '', 
-        institution: userData?.institution || '', gender: 'Male',
-        filmmakingMarks: 0, cameraOperationMarks: 0, videoEditingMarks: 0
+        firstName: '', lastName: '', regNumber: '', faculty: isMaster ? 'MULTIMEDIA PRODUCTION' : (userData?.faculty || ''), 
+        institution: 'NAD CLASS', gender: 'Male',
+        marks: {}
       })
     } catch (err) {
       console.error(err)
@@ -283,7 +301,10 @@ export default function MarksManager() {
                   </div>
                 </td>
                 <td className="p-6">
-                  <p className="text-xs text-white/60">{mark.faculty}</p>
+                  <p className="text-xs text-white/60 font-bold uppercase">{mark.faculty}</p>
+                  <p className="text-[10px] text-white/30 truncate max-w-[150px]">
+                    {Object.keys(mark.marks || {}).join(', ')}
+                  </p>
                 </td>
                 <td className="p-6 text-center">
                   <p className="font-bold text-accent">{mark.averageMarks}%</p>
@@ -296,7 +317,14 @@ export default function MarksManager() {
                     <button 
                       onClick={() => {
                         setSelectedMark(mark)
-                        setFormData(mark)
+                        setFormData({
+                          ...mark,
+                          marks: mark.marks || {
+                            'Filmmaking': mark.filmmakingMarks || 0,
+                            'Camera Operation': mark.cameraOperationMarks || 0,
+                            'Video Editing': mark.videoEditingMarks || 0
+                          }
+                        })
                         setIsModalOpen(true)
                       }}
                       className="p-2 hover:bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors"
@@ -313,6 +341,7 @@ export default function MarksManager() {
                 </td>
               </tr>
             ))}
+
           </tbody>
         </table>
       </div>
@@ -365,16 +394,28 @@ export default function MarksManager() {
                      <input 
                       type="text" required 
                       className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm"
-                      value={formData.regNumber} onChange={(e) => setFormData({...formData, regNumber: e.target.value})}
+                      value={formData.regNumber} onChange={(e) => setFormData({...formData, regNumber: e.target.value.toUpperCase()})}
                      />
                    </div>
                    <div className="space-y-2">
                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Faculty</label>
-                     <input 
-                      type="text" required 
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm"
-                      value={formData.faculty} onChange={(e) => setFormData({...formData, faculty: e.target.value})}
-                     />
+                     {isMaster ? (
+                       <select 
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm appearance-none"
+                        value={formData.faculty} onChange={(e) => setFormData({...formData, faculty: e.target.value, marks: {}})}
+                       >
+                         {Object.keys(FACULTY_CONFIG).map(f => (
+                           <option key={f} value={f} className="bg-background">{f}</option>
+                         ))}
+                         <option value="N/A" className="bg-background">Other/General</option>
+                       </select>
+                     ) : (
+                       <input 
+                        type="text" disabled 
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm opacity-50 cursor-not-allowed"
+                        value={formData.faculty}
+                       />
+                     )}
                    </div>
                 </div>
 
@@ -382,8 +423,7 @@ export default function MarksManager() {
                    <div className="space-y-2">
                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Gender</label>
                      <select 
-                      disabled={!isMaster}
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent transition-colors appearance-none text-sm disabled:opacity-50"
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent transition-colors appearance-none text-sm"
                       value={formData.gender} onChange={(e) => setFormData({...formData, gender: e.target.value})}
                      >
                        <option value="Male" className="bg-background">Male</option>
@@ -400,32 +440,26 @@ export default function MarksManager() {
                    </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-6 pt-6 border-t border-white/5">
-                   <div className="space-y-2">
-                     <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Filmmaking</label>
-                     <input 
-                      type="number" required min="0" max="100"
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-center font-bold text-accent"
-                      value={formData.filmmakingMarks} onChange={(e) => setFormData({...formData, filmmakingMarks: e.target.value})}
-                     />
-                   </div>
-                   <div className="space-y-2">
-                     <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Camera Op</label>
-                     <input 
-                      type="number" required min="0" max="100"
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-center font-bold text-accent"
-                      value={formData.cameraOperationMarks} onChange={(e) => setFormData({...formData, cameraOperationMarks: e.target.value})}
-                     />
-                   </div>
-                   <div className="space-y-2">
-                     <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Video Editing</label>
-                     <input 
-                      type="number" required min="0" max="100"
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-center font-bold text-accent"
-                      value={formData.videoEditingMarks} onChange={(e) => setFormData({...formData, videoEditingMarks: e.target.value})}
-                     />
+                <div className="pt-6 border-t border-white/5">
+                   <h4 className="text-[10px] font-bold text-accent uppercase tracking-[0.2em] mb-6">Course Performance Marks</h4>
+                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                      {(FACULTY_CONFIG[formData.faculty] || DEFAULT_COURSES).map(course => (
+                        <div key={course} className="space-y-2">
+                           <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">{course}</label>
+                           <input 
+                            type="number" required min="0" max="100"
+                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-center font-bold text-accent"
+                            value={formData.marks[course] || 0} 
+                            onChange={(e) => setFormData({
+                              ...formData, 
+                              marks: { ...formData.marks, [course]: parseFloat(e.target.value) || 0 }
+                            })}
+                           />
+                        </div>
+                      ))}
                    </div>
                 </div>
+
 
                 <button 
                   type="submit" 

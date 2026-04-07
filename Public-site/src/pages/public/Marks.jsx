@@ -24,7 +24,7 @@ export default function Marks() {
   }
   const [regNumber, setRegNumber] = useState('')
   const [loading, setLoading] = useState(false)
-  const [studentData, setStudentData] = useState(null)
+  const [results, setResults] = useState([])
   const [error, setError] = useState('')
   
   // Claim Your Spot State
@@ -44,14 +44,14 @@ export default function Marks() {
 
     setLoading(true)
     setError('')
-    setStudentData(null)
+    setResults([])
 
     try {
-      const q = query(collection(db, 'marks'), where('regNumber', '==', regNumber.trim()))
+      const q = query(collection(db, 'marks'), where('regNumber', '==', regNumber.trim().toUpperCase()))
       const querySnapshot = await getDocs(q)
       
       if (!querySnapshot.empty) {
-        setStudentData(querySnapshot.docs[0].data())
+        setResults(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
       } else {
         setError('No records found for this Registration Number.')
         setShowClaimForm(true)
@@ -65,17 +65,27 @@ export default function Marks() {
     }
   }
 
+
   const downloadPDF = async () => {
-    const element = document.getElementById('report-card')
-    const canvas = await html2canvas(element, { scale: 2 })
-    const imgData = canvas.toDataURL('image/png')
     const pdf = new jsPDF('p', 'mm', 'a4')
-    const imgProps = pdf.getImageProperties(imgData)
-    const pdfWidth = pdf.internal.pageSize.getWidth()
-    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width
-    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
-    pdf.save(`${studentData.firstName}_${studentData.lastName}_Marks.pdf`)
+    const elements = document.querySelectorAll('.report-card-container')
+    
+    setLoading(true)
+    for (let i = 0; i < elements.length; i++) {
+      const canvas = await html2canvas(elements[i], { scale: 2 })
+      const imgData = canvas.toDataURL('image/png')
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width
+      
+      if (i > 0) pdf.addPage()
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
+    }
+    
+    const name = results[0] ? `${results[0].firstName}_${results[0].lastName}` : 'Marks'
+    pdf.save(`${name}_Full_Report.pdf`)
+    setLoading(false)
   }
+
 
   const handleClaimSpot = (e) => {
     e.preventDefault()
@@ -205,150 +215,169 @@ export default function Marks() {
               )}
             </motion.div>
 
-          {studentData && (
+          {results.length > 0 && (
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="space-y-8"
+              className="space-y-16"
             >
-              {/* Report Preview */}
-              <div id="report-card" className="bg-white text-black p-8 md:p-12 rounded-lg shadow-2xl overflow-hidden font-sans border border-primary/20">
-                <div className="flex flex-col md:flex-row justify-between items-center border-b-2 border-primary/20 pb-8 mb-8 gap-6">
-                  <div className="flex flex-col md:flex-row items-center gap-4 text-center md:text-left">
-                    <img src="/android-chrome-512x512.png" alt="eNOTA Logo" className="w-16 h-16 rounded-xl border border-primary/10 shadow-sm" />
-                    <div>
-                      <h2 className="text-3xl font-extrabold text-primary mb-1 tracking-tighter">eNOTA PORTAL</h2>
-                      <p className="text-[10px] uppercase tracking-widest font-bold text-primary opacity-60">The Marks Report</p>
+              {results.map((studentData) => (
+                <div key={studentData.id} className="report-card-container space-y-8">
+                  <div className="report-card bg-white text-black p-8 md:p-12 rounded-lg shadow-2xl overflow-hidden font-sans border border-primary/20">
+                    <div className="flex flex-col md:flex-row justify-between items-center border-b-2 border-primary/20 pb-8 mb-8 gap-6">
+                      <div className="flex flex-col md:flex-row items-center gap-4 text-center md:text-left">
+                        <img src="/android-chrome-512x512.png" alt="eNOTA Logo" className="w-16 h-16 rounded-xl border border-primary/10 shadow-sm" />
+                        <div>
+                          <h2 className="text-3xl font-extrabold text-primary mb-1 tracking-tighter">eNOTA PORTAL</h2>
+                          <p className="text-[10px] uppercase tracking-widest font-bold text-primary opacity-60">The Marks Report</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 bg-primary/5 px-6 py-4 rounded-xl border border-primary/10">
+                        <div className="text-right">
+                          <p className="text-[10px] uppercase font-bold text-primary/60">Overall Grade</p>
+                          <p className="text-3xl font-extrabold text-primary leading-none">{studentData.overallGrade}</p>
+                        </div>
+                        <div className="w-px h-8 bg-primary/20"></div>
+                        <div className="text-right">
+                          <p className="text-[10px] uppercase font-bold text-primary/60">T. Average</p>
+                          <p className="text-3xl font-extrabold text-primary leading-none">{studentData.averageMarks}%</p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-4 bg-primary/5 px-6 py-4 rounded-xl border border-primary/10">
-                    <div className="text-right">
-                      <p className="text-[10px] uppercase font-bold text-primary/60">Overall Grade</p>
-                      <p className="text-3xl font-extrabold text-primary leading-none">{studentData.overallGrade}</p>
+
+                    <div className="grid md:grid-cols-2 gap-8 mb-12">
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-3">
+                          <User size={18} className="text-primary" />
+                          <div>
+                            <p className="text-[10px] uppercase font-bold text-gray-400">Student Name</p>
+                            <p className="font-bold text-lg">{studentData.firstName} {studentData.lastName}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <GraduationCap size={18} className="text-primary" />
+                          <div>
+                            <p className="text-[10px] uppercase font-bold text-gray-400">Faculty/Department</p>
+                            <p className="font-bold text-lg">{studentData.faculty || 'N/A'}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-3">
+                          <FileText size={18} className="text-primary" />
+                          <div>
+                            <p className="text-[10px] uppercase font-bold text-gray-400">Reg Number</p>
+                            <p className="font-bold text-lg">{studentData.regNumber}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <MapPin size={18} className="text-primary" />
+                          <div>
+                            <p className="text-[10px] uppercase font-bold text-gray-400">Institution</p>
+                            <p className="font-bold text-lg">{studentData.institution || 'NAD CLASS'}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <User size={18} className="text-primary opacity-40" />
+                          <div>
+                            <p className="text-[10px] uppercase font-bold text-gray-400">Gender</p>
+                            <p className="font-bold text-lg">{studentData.gender || 'N/A'}</p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="w-px h-8 bg-primary/20"></div>
-                    <div className="text-right">
-                      <p className="text-[10px] uppercase font-bold text-primary/60">T. Average</p>
-                      <p className="text-3xl font-extrabold text-primary leading-none">{studentData.averageMarks}%</p>
+
+                    <div className="bg-primary/5 p-6 rounded-2xl border border-primary/10 mb-12 italic">
+                       <p className="text-sm text-primary font-medium text-center">
+                         "{getProfessionalComment(studentData.overallGrade)}"
+                       </p>
+                    </div>
+
+                    <table className="w-full border-collapse border border-primary overflow-hidden rounded-t-xl mb-12">
+                      <thead>
+                        <tr className="bg-primary text-white">
+                          <th className="py-4 px-6 text-left font-bold uppercase tracking-widest text-xs">Courses</th>
+                          <th className="py-4 px-6 text-center font-bold uppercase tracking-widest text-xs">Marks</th>
+                          <th className="py-4 px-6 text-center font-bold uppercase tracking-widest text-xs">Grade</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {studentData.marks ? (
+                          Object.entries(studentData.marks).map(([course, mark]) => (
+                            <tr key={course} className="border-b border-primary/10">
+                              <td className="py-4 px-6 font-bold uppercase text-xs">{course}</td>
+                              <td className="py-4 px-6 text-center font-bold">{mark}</td>
+                              <td className="py-4 px-6 text-center">
+                                <span className="font-bold text-primary">
+                                  {studentData[`grade${course.replace(/\s+/g, '')}`] || 'N/A'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <>
+                            <tr className="border-b border-primary/10">
+                              <td className="py-4 px-6 font-medium">FILMMAKING</td>
+                              <td className="py-4 px-6 text-center font-bold">{studentData.filmmakingMarks ?? 'N/A'}</td>
+                              <td className="py-4 px-6 text-center"><span className="font-bold text-primary">{studentData.gradeFilmmaking || 'N/A'}</span></td>
+                            </tr>
+                            <tr className="border-b border-primary/10">
+                              <td className="py-4 px-6 font-medium">CAMERA OPERATION</td>
+                              <td className="py-4 px-6 text-center font-bold">{studentData.cameraOperationMarks ?? 'N/A'}</td>
+                              <td className="py-4 px-6 text-center"><span className="font-bold text-primary">{studentData.gradeCameraOperation || 'N/A'}</span></td>
+                            </tr>
+                            <tr className="border-b border-primary/20">
+                              <td className="py-4 px-6 font-medium">VIDEO EDITING</td>
+                              <td className="py-4 px-6 text-center font-bold">{studentData.videoEditingMarks ?? 'N/A'}</td>
+                              <td className="py-4 px-6 text-center"><span className="font-bold text-primary">{studentData.gradeVideoEditing || 'N/A'}</span></td>
+                            </tr>
+                          </>
+                        )}
+                        <tr className="bg-primary/5">
+                          <td className="py-4 px-6 font-bold text-primary uppercase text-sm">AVERAGE</td>
+                          <td className="py-4 px-6 text-center font-extrabold text-primary text-lg">{studentData.averageMarks}</td>
+                          <td className="py-4 px-6"></td>
+                        </tr>
+                      </tbody>
+                    </table>
+
+                    <div className="border border-primary rounded-xl p-6 bg-primary/2">
+                        <h4 className="text-[10px] uppercase font-bold text-primary/60 mb-4 tracking-widest">Master Grading Scale Reference</h4>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-y-4 gap-x-2 text-[10px]">
+                          <div><span className="font-bold text-primary">A+:</span> 90-100 (Excelled)</div>
+                          <div><span className="font-bold text-primary">A:</span> 80-89.9 (Very Good)</div>
+                          <div><span className="font-bold text-primary">B+:</span> 75-79.9 (Nice)</div>
+                          <div><span className="font-bold text-primary">B:</span> 70-74.9 (Good)</div>
+                          <div><span className="font-bold text-primary">C+:</span> 65-69.9 (Satisfactory)</div>
+                          <div><span className="font-bold text-primary">C:</span> 60-64.9 (Passed)</div>
+                          <div><span className="font-bold text-primary">D:</span> 55-59.9 (Passed)</div>
+                          <div><span className="font-bold text-primary">E:</span> 50-54.9 (Passed)</div>
+                          <div><span className="font-bold text-red-500">F:</span> &lt; 50 (Failed)</div>
+                        </div>
+                    </div>
+
+                    <div className="mt-12 text-center py-6 border-y border-primary/5">
+                        <p className="text-xl font-display font-bold italic text-primary/80">
+                          "Well begun is half done"
+                        </p>
+                        <p className="text-xs font-bold text-primary/40 uppercase tracking-widest mt-2">
+                          — Aristotle
+                        </p>
+                    </div>
+
+                    <div className="mt-8 text-center">
+                      <p className="text-[10px] text-gray-400 font-medium">Generated by eNOTA Portal • nadproduction.com</p>
                     </div>
                   </div>
                 </div>
+              ))}
 
-                <div className="grid md:grid-cols-2 gap-8 mb-12">
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-3">
-                      <User size={18} className="text-primary" />
-                      <div>
-                        <p className="text-[10px] uppercase font-bold text-gray-400">Student Name</p>
-                        <p className="font-bold text-lg">{studentData.firstName} {studentData.lastName}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <GraduationCap size={18} className="text-primary" />
-                      <div>
-                        <p className="text-[10px] uppercase font-bold text-gray-400">Faculty/Department</p>
-                        <p className="font-bold text-lg">{studentData.faculty || 'N/A'}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-3">
-                      <FileText size={18} className="text-primary" />
-                      <div>
-                        <p className="text-[10px] uppercase font-bold text-gray-400">Reg Number</p>
-                        <p className="font-bold text-lg">{studentData.regNumber}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <MapPin size={18} className="text-primary" />
-                      <div>
-                        <p className="text-[10px] uppercase font-bold text-gray-400">Institution</p>
-                        <p className="font-bold text-lg">{studentData.institution || 'NAD CLASS'}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <User size={18} className="text-primary opacity-40" />
-                      <div>
-                        <p className="text-[10px] uppercase font-bold text-gray-400">Gender</p>
-                        <p className="font-bold text-lg">{studentData.gender || 'N/A'}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-primary/5 p-6 rounded-2xl border border-primary/10 mb-12 italic">
-                   <p className="text-sm text-primary font-medium text-center">
-                     "{getProfessionalComment(studentData.overallGrade)}"
-                   </p>
-                </div>
-
-                <table className="w-full border-collapse border border-primary overflow-hidden rounded-t-xl mb-12">
-                  <thead>
-                    <tr className="bg-primary text-white">
-                      <th className="py-4 px-6 text-left font-bold uppercase tracking-widest text-xs">Courses</th>
-                      <th className="py-4 px-6 text-center font-bold uppercase tracking-widest text-xs">Marks</th>
-                      <th className="py-4 px-6 text-center font-bold uppercase tracking-widest text-xs">Grade</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-primary/10">
-                      <td className="py-4 px-6 font-medium">FILMMAKING</td>
-                      <td className="py-4 px-6 text-center font-bold">{studentData.filmmakingMarks ?? 'N/A'}</td>
-                      <td className="py-4 px-6 text-center"><span className="font-bold text-primary">{studentData.gradeFilmmaking || 'N/A'}</span></td>
-                    </tr>
-                    <tr className="border-b border-primary/10">
-                      <td className="py-4 px-6 font-medium">CAMERA OPERATION</td>
-                      <td className="py-4 px-6 text-center font-bold">{studentData.cameraOperationMarks ?? 'N/A'}</td>
-                      <td className="py-4 px-6 text-center"><span className="font-bold text-primary">{studentData.gradeCameraOperation || 'N/A'}</span></td>
-                    </tr>
-                    <tr className="border-b border-primary/20">
-                      <td className="py-4 px-6 font-medium">VIDEO EDITING</td>
-                      <td className="py-4 px-6 text-center font-bold">{studentData.videoEditingMarks ?? 'N/A'}</td>
-                      <td className="py-4 px-6 text-center"><span className="font-bold text-primary">{studentData.gradeVideoEditing || 'N/A'}</span></td>
-                    </tr>
-                    <tr className="bg-primary/5">
-                      <td className="py-4 px-6 font-bold text-primary uppercase text-sm">AVERAGE</td>
-                      <td className="py-4 px-6 text-center font-extrabold text-primary text-lg">{studentData.averageMarks}</td>
-                      <td className="py-4 px-6"></td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                 <div className="border border-primary rounded-xl p-6 bg-primary/2">
-                    <h4 className="text-[10px] uppercase font-bold text-primary/60 mb-4 tracking-widest">Master Grading Scale Reference</h4>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-y-4 gap-x-2 text-[10px]">
-                       <div><span className="font-bold text-primary">A+:</span> 90-100 (Excelled)</div>
-                       <div><span className="font-bold text-primary">A:</span> 80-89.9 (Very Good)</div>
-                       <div><span className="font-bold text-primary">B+:</span> 75-79.9 (Nice)</div>
-                       <div><span className="font-bold text-primary">B:</span> 70-74.9 (Good)</div>
-                       <div><span className="font-bold text-primary">C+:</span> 65-69.9 (Satisfactory)</div>
-                       <div><span className="font-bold text-primary">C:</span> 60-64.9 (Passed)</div>
-                       <div><span className="font-bold text-primary">D:</span> 55-59.9 (Passed)</div>
-                       <div><span className="font-bold text-primary">E:</span> 50-54.9 (Passed)</div>
-                       <div><span className="font-bold text-red-500">F:</span> &lt; 50 (Failed)</div>
-                    </div>
-                 </div>
-
-                 <div className="mt-12 text-center py-6 border-y border-primary/5">
-                    <p className="text-xl font-display font-bold italic text-primary/80">
-                      "Well begun is half done"
-                    </p>
-                    <p className="text-xs font-bold text-primary/40 uppercase tracking-widest mt-2">
-                      — Aristotle
-                    </p>
-                 </div>
-
-                 <div className="mt-8 text-center">
-                   <p className="text-[10px] text-gray-400 font-medium">Generated by eNOTA Portal • nadproduction.com</p>
-                 </div>
-              </div>
-
-              <div className="flex justify-center">
+              <div className="flex justify-center pb-20">
                 <button 
                   onClick={downloadPDF}
-                  className="btn-primary flex items-center gap-2 px-12 py-4"
+                  className="btn-primary flex items-center gap-2 px-12 py-4 shadow-2xl hover:scale-105 active:scale-95 transition-all"
                 >
-                  <Download size={20} /> Download Report
+                  <Download size={20} /> Download Combined Report
                 </button>
               </div>
             </motion.div>
