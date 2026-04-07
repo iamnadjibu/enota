@@ -24,19 +24,11 @@ export default function MarksManager() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [availableCourses, setAvailableCourses] = useState([])
+  const [selectedCourses, setSelectedCourses] = useState([])
   const [selectedMark, setSelectedMark] = useState(null)
   const [isSeeding, setIsSeeding] = useState(false)
-
-  // Faculty Course Mapping
-  const FACULTY_CONFIG = {
-    'MULTIMEDIA PRODUCTION': ['Filmmaking', 'Camera Operation'],
-    'FILMMAKING AND VIDEO PRODUCTION': ['Filmmaking', 'Camera Operation'],
-    'VIBE CODING': ['Frontend Development', 'Backend Development', 'UI/UX Design'],
-    'COLOR GRADING': ['Color Theory', 'DaVinci Resolve'],
-    'AI FILMMAKING': ['Prompt Engineering', 'AI Video Tools']
-  }
-
-  const DEFAULT_COURSES = ['Filmmaking', 'Camera Operation', 'Video Editing']
 
   // Form State
   const [formData, setFormData] = useState({
@@ -48,6 +40,7 @@ export default function MarksManager() {
     gender: 'Male',
     marks: {} // { 'Filmmaking': 85, 'Camera Operation': 90 }
   })
+
 
 
   useEffect(() => {
@@ -82,30 +75,54 @@ export default function MarksManager() {
     return 'F'
   }
 
+  // Fetch Available Courses for Picker
+  useEffect(() => {
+    if (!formData.faculty || formData.faculty === 'N/A') {
+      setAvailableCourses([])
+      return
+    }
+
+    const q = query(collection(db, 'courses'), where('faculties', 'array-contains', formData.faculty))
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const courseList = snapshot.docs.map(doc => doc.data().title)
+      const uniqueCourses = [...new Set(courseList)]
+      setAvailableCourses(uniqueCourses)
+    })
+
+
+    return unsubscribe
+  }, [formData.faculty])
+
+
   const handleSave = async (e) => {
     e.preventDefault()
+    if (selectedCourses.length === 0) return alert('Please select at least one course')
     setLoading(true)
 
-    const activeCourses = FACULTY_CONFIG[formData.faculty] || DEFAULT_COURSES
-    const marksValues = activeCourses.map(c => parseFloat(formData.marks[c] || 0))
+    const marksValues = selectedCourses.map(c => parseFloat(formData.marks[c] || 0))
     const total = marksValues.reduce((a, b) => a + b, 0)
-    const avg = (total / activeCourses.length).toFixed(2)
+    const avg = (total / selectedCourses.length).toFixed(2)
     const overallGrade = calculateGrade(avg)
     
-    // Also include individual grades for legacy compatibility if needed
+    // Include individual grades for legacy compatibility
     const individualGrades = {}
-    activeCourses.forEach(c => {
+    selectedCourses.forEach(c => {
       individualGrades[`grade${c.replace(/\s+/g, '')}`] = calculateGrade(formData.marks[c])
+    })
+
+    const finalMarks = {}
+    selectedCourses.forEach(c => {
+      finalMarks[c] = formData.marks[c] || 0
     })
 
     const finalData = {
       ...formData,
+      marks: finalMarks,
       averageMarks: avg,
       overallGrade,
       ...individualGrades,
       updatedAt: new Date().toISOString()
     }
-
 
     try {
       if (selectedMark) {
@@ -115,6 +132,7 @@ export default function MarksManager() {
       }
       setIsModalOpen(false)
       setSelectedMark(null)
+      setSelectedCourses([])
       setFormData({
         firstName: '', lastName: '', regNumber: '', faculty: isMaster ? 'MULTIMEDIA PRODUCTION' : (userData?.faculty || ''), 
         institution: 'NAD CLASS', gender: 'Male',
@@ -126,6 +144,7 @@ export default function MarksManager() {
       setLoading(false)
     }
   }
+
 
   const handleDelete = async (id) => {
     if (window.confirm('Delete this record?')) {
@@ -256,11 +275,25 @@ export default function MarksManager() {
              </button>
           )}
           <button 
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              setSelectedMark(null)
+              setFormData({
+                firstName: '',
+                lastName: '',
+                regNumber: '',
+                faculty: userData?.faculty || 'MULTIMEDIA PRODUCTION',
+                institution: 'NAD CLASS',
+                gender: 'Male',
+                marks: {}
+              })
+              setSelectedCourses([])
+              setIsModalOpen(true)
+            }}
             className="btn-primary flex items-center gap-2"
           >
             <Plus size={18} /> Add Student
           </button>
+
         </div>
       </div>
 
@@ -317,20 +350,19 @@ export default function MarksManager() {
                     <button 
                       onClick={() => {
                         setSelectedMark(mark)
+                        const existingMarks = mark.marks || {}
                         setFormData({
                           ...mark,
-                          marks: mark.marks || {
-                            'Filmmaking': mark.filmmakingMarks || 0,
-                            'Camera Operation': mark.cameraOperationMarks || 0,
-                            'Video Editing': mark.videoEditingMarks || 0
-                          }
+                          marks: existingMarks
                         })
+                        setSelectedCourses(Object.keys(existingMarks))
                         setIsModalOpen(true)
                       }}
                       className="p-2 hover:bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors"
                     >
                       <Edit2 size={16} />
                     </button>
+
                     <button 
                       onClick={() => handleDelete(mark.id)}
                       className="p-2 hover:bg-white/5 rounded-lg text-red-500/40 hover:text-red-500 transition-colors"
@@ -398,68 +430,106 @@ export default function MarksManager() {
                      />
                    </div>
                    <div className="space-y-2">
-                     <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Faculty</label>
-                     {isMaster ? (
-                       <select 
-                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm appearance-none"
-                        value={formData.faculty} onChange={(e) => setFormData({...formData, faculty: e.target.value, marks: {}})}
-                       >
-                         {Object.keys(FACULTY_CONFIG).map(f => (
-                           <option key={f} value={f} className="bg-background">{f}</option>
-                         ))}
-                         <option value="N/A" className="bg-background">Other/General</option>
-                       </select>
-                     ) : (
-                       <input 
-                        type="text" disabled 
-                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm opacity-50 cursor-not-allowed"
-                        value={formData.faculty}
-                       />
-                     )}
+                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Faculty</label>
+                      {isMaster ? (
+                        <select 
+                         className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm appearance-none"
+                         value={formData.faculty} 
+                         onChange={(e) => {
+                           setFormData({...formData, faculty: e.target.value, marks: {}})
+                           setSelectedCourses([])
+                         }}
+                        >
+                          {['FILMMAKING AND VIDEO PRODUCTION', 'MULTIMEDIA PRODUCTION', 'COLOR GRADING', 'AI FILMMAKING', 'VIBE CODING'].map(f => (
+                            <option key={f} value={f} className="bg-background">{f}</option>
+                          ))}
+                          <option value="N/A" className="bg-background">Other/General</option>
+                        </select>
+                      ) : (
+                        <input 
+                         type="text" disabled 
+                         className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm opacity-50 cursor-not-allowed"
+                         value={formData.faculty}
+                        />
+                      )}
                    </div>
                 </div>
 
                 <div className="grid sm:grid-cols-2 gap-6">
-                   <div className="space-y-2">
-                     <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Gender</label>
-                     <select 
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent transition-colors appearance-none text-sm"
-                      value={formData.gender} onChange={(e) => setFormData({...formData, gender: e.target.value})}
-                     >
-                       <option value="Male" className="bg-background">Male</option>
-                       <option value="Female" className="bg-background">Female</option>
-                     </select>
-                   </div>
-                   <div className="space-y-2">
-                     <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Institution</label>
-                     <input 
-                      type="text" required 
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm"
-                      value={formData.institution} onChange={(e) => setFormData({...formData, institution: e.target.value})}
-                     />
-                   </div>
-                </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Gender</label>
+                      <select 
+                       className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent transition-colors appearance-none text-sm"
+                       value={formData.gender} onChange={(e) => setFormData({...formData, gender: e.target.value})}
+                      >
+                        <option value="Male" className="bg-background">Male</option>
+                        <option value="Female" className="bg-background">Female</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Institution</label>
+                      <input 
+                       type="text" required 
+                       className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm"
+                       value={formData.institution} onChange={(e) => setFormData({...formData, institution: e.target.value})}
+                      />
+                    </div>
+                 </div>
 
-                <div className="pt-6 border-t border-white/5">
-                   <h4 className="text-[10px] font-bold text-accent uppercase tracking-[0.2em] mb-6">Course Performance Marks</h4>
-                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                      {(FACULTY_CONFIG[formData.faculty] || DEFAULT_COURSES).map(course => (
-                        <div key={course} className="space-y-2">
-                           <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">{course}</label>
-                           <input 
-                            type="number" required min="0" max="100"
-                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-center font-bold text-accent"
-                            value={formData.marks[course] || 0} 
-                            onChange={(e) => setFormData({
-                              ...formData, 
-                              marks: { ...formData.marks, [course]: parseFloat(e.target.value) || 0 }
-                            })}
-                           />
+                 <div className="pt-6 border-t border-white/5 space-y-8">
+                   <div className="space-y-4">
+                     <h4 className="text-[10px] font-bold text-accent uppercase tracking-[0.2em]">Step 1: Select Courses for this Student</h4>
+                     <div className="flex flex-wrap gap-2">
+                        {availableCourses.length > 0 ? (
+                          availableCourses.map(course => (
+                            <button 
+                              key={course}
+                              type="button"
+                              onClick={() => {
+                                const updated = selectedCourses.includes(course)
+                                  ? selectedCourses.filter(c => c !== course)
+                                  : [...selectedCourses, course]
+                                setSelectedCourses(updated)
+                              }}
+                              className={`text-[10px] font-bold py-2.5 px-4 rounded-xl border transition-all ${selectedCourses.includes(course) ? 'bg-accent text-background border-accent' : 'border-white/10 text-white/40 hover:border-white/20'}`}
+                            >
+                              {course}
+                            </button>
+                          ))
+                        ) : (
+                          <p className="text-white/20 text-[10px] italic">No active courses found for this faculty in the curriculum system.</p>
+                        )}
+                     </div>
+                   </div>
+
+                   {selectedCourses.length > 0 && (
+                     <div className="space-y-6 pt-6 border-t border-white/5">
+                        <h4 className="text-[10px] font-bold text-accent uppercase tracking-[0.2em]">Step 2: Enter Component Marks</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                          {selectedCourses.map((course) => (
+                            <div key={course} className="space-y-4 bg-white/2 p-6 rounded-3xl border border-white/5 hover:border-accent/10 transition-all">
+                              <div className="flex items-center justify-between">
+                                <label className="text-[10px] font-bold text-white uppercase tracking-widest">{course}</label>
+                                <span className="text-[10px] font-bold text-accent bg-accent/10 px-2 py-0.5 rounded-lg">{calculateGrade(formData.marks[course] || 0)}</span>
+                              </div>
+                              <div className="relative">
+                                <input 
+                                  type="number" min="0" max="100"
+                                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-xl font-bold tracking-tighter"
+                                  value={formData.marks[course] || ''} 
+                                  onChange={(e) => setFormData({
+                                    ...formData, 
+                                    marks: { ...formData.marks, [course]: e.target.value }
+                                  })}
+                                />
+                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-white/10 font-bold">%</span>
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                   </div>
+                     </div>
+                   )}
                 </div>
-
 
                 <button 
                   type="submit" 

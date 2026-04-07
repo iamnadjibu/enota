@@ -52,12 +52,13 @@ export default function Materials() {
   }
 
   const fetchCourses = (faculty) => {
-    const q = query(collection(db, 'courses'), where('faculty', '==', faculty))
+    const q = query(collection(db, 'courses'), where('faculties', 'array-contains', faculty))
     onSnapshot(q, (snapshot) => {
       setCourses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
       setLoading(false)
     })
   }
+
 
   const getDrivePreview = (url) => {
     if (!url) return null

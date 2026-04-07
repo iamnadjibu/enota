@@ -30,7 +30,7 @@ export default function MaterialsManager() {
   // Form State
   const [formData, setFormData] = useState({
     title: '',
-    faculty: userData?.faculty || 'MODERN MULTIMEDIA',
+    faculties: userData?.faculty ? [userData.faculty] : ['MULTIMEDIA PRODUCTION'],
     description: '',
     units: []
   })
@@ -41,7 +41,8 @@ export default function MaterialsManager() {
 
     const q = isMaster 
       ? query(collection(db, 'courses'))
-      : query(collection(db, 'courses'), where('faculty', '==', userData?.faculty))
+      : query(collection(db, 'courses'), where('faculties', 'array-contains', userData?.faculty))
+
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setCourses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
@@ -57,7 +58,7 @@ export default function MaterialsManager() {
   const handleCreateNew = () => {
     setFormData({
       title: '',
-      faculty: userData?.faculty || 'MODERN MULTIMEDIA',
+      faculties: userData?.faculty ? [userData.faculty] : ['MULTIMEDIA PRODUCTION'],
       description: '',
       units: []
     })
@@ -66,10 +67,14 @@ export default function MaterialsManager() {
   }
 
   const handleEdit = (course) => {
-    setFormData(course)
+    setFormData({
+      ...course,
+      faculties: course.faculties || (course.faculty ? [course.faculty] : [])
+    })
     setActiveCourse(course.id)
     setIsEditing(true)
   }
+
 
   const handleAddUnit = () => {
     const newUnit = {
@@ -108,7 +113,15 @@ export default function MaterialsManager() {
     if (!formData.title) return alert('Please enter a course title')
     try {
       const docRef = activeCourse ? doc(db, 'courses', activeCourse) : doc(collection(db, 'courses'))
-      await setDoc(docRef, formData)
+      
+      // Support backward compatibility while using the new structure
+      const finalData = { 
+        ...formData, 
+        faculty: formData.faculties[0] || 'N/A' // Legacy primary faculty for older rules/query support
+      }
+      
+      await setDoc(docRef, finalData)
+
       setIsEditing(false)
       alert('Course saved successfully!')
     } catch (err) {
@@ -172,18 +185,28 @@ export default function MaterialsManager() {
                       value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Faculty</label>
-                    <select 
-                      disabled={!isMaster}
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm"
-                      value={formData.faculty} onChange={(e) => setFormData({...formData, faculty: e.target.value})}
-                    >
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Assigned Faculties (Multiple Allowed)</label>
+                    <div className="grid grid-cols-2 gap-2">
                       {['FILMMAKING AND VIDEO PRODUCTION', 'MULTIMEDIA PRODUCTION', 'COLOR GRADING', 'AI FILMMAKING', 'VIBE CODING'].map(f => (
-                        <option key={f} value={f} className="bg-background">{f}</option>
+                        <button 
+                          key={f}
+                          type="button"
+                          disabled={!isMaster}
+                          onClick={() => {
+                            const updated = formData.faculties.includes(f)
+                              ? formData.faculties.filter(fac => fac !== f)
+                              : [...formData.faculties, f]
+                            setFormData({ ...formData, faculties: updated })
+                          }}
+                          className={`text-[10px] font-bold py-2 px-3 rounded-xl border transition-all ${formData.faculties.includes(f) ? 'bg-accent text-background border-accent' : 'border-white/10 text-white/40'}`}
+                        >
+                          {f}
+                        </button>
                       ))}
-                    </select>
+                    </div>
                   </div>
+
                </div>
                <div className="space-y-2">
                   <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Course Introduction (Renders Newlines)</label>
@@ -324,10 +347,15 @@ export default function MaterialsManager() {
                       <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest leading-none">Modules</p>
                       <p className="text-sm font-bold">{course.units?.length || 0} Units</p>
                    </div>
-                   <div className="text-right">
-                      <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest leading-none">Faculty</p>
-                      <p className="text-[10px] font-bold text-accent truncate max-w-[120px]">{course.faculty}</p>
-                   </div>
+                    <div className="text-right flex flex-col items-end">
+                       <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest leading-none">Faculties</p>
+                       <div className="flex flex-wrap justify-end gap-1 mt-1">
+                          {(course.faculties || [course.faculty]).map(f => (
+                            <span key={f} className="text-[8px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded truncate max-w-[80px]">{f}</span>
+                          ))}
+                       </div>
+                    </div>
+
                 </div>
               </motion.div>
             ))}

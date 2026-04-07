@@ -15,30 +15,55 @@ service cloud.firestore {
     // Function to check if user is an approved Admin
     function isAdmin() {
       return isAuthenticated() && (
-        isMaster() || 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin" &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == "active"
+        isMaster() || (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin" &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == "active"
+        )
+      );
+    }
+
+    // Function to check if user is admin of a specific faculty
+    function isFacultyAdmin(faculty) {
+      return isMaster() || (
+        isAdmin() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.faculty == faculty
       );
     }
 
     // Users Collection
     match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow create: if true; // Allow registraton
+      allow read: if isAuthenticated() && (isAdmin() || request.auth.uid == userId);
+      allow create: if true; // Allow self-registration
       allow update: if isMaster() || request.auth.uid == userId;
       allow delete: if isMaster();
     }
 
     // Marks Collection
     match /marks/{markId} {
-      allow read: if true; // Allows students to search by Reg Number without login
-      allow write: if isAdmin();
+      // Allows students to search by Reg Number without login
+      allow read: if true; 
+      
+      // Scoped write access based on faculty for regular admins
+      allow create: if isMaster() || isFacultyAdmin(request.resource.data.faculty);
+      allow update: if isMaster() || isFacultyAdmin(resource.data.faculty);
+      allow delete: if isMaster();
     }
 
-    // Settings Collection
+    // Courses/Materials Collection
+    match /courses/{courseId} {
+      // Public read for curriculum materials
+      allow read: if true;
+      
+      // Faculty-scoped management
+      allow create: if isMaster() || isFacultyAdmin(request.resource.data.faculty);
+      allow update: if isMaster() || isFacultyAdmin(resource.data.faculty);
+      allow delete: if isMaster() || isFacultyAdmin(resource.data.faculty);
+    }
+
+    // Settings/Branding Collection
     match /settings/{settingId} {
       allow read: if true;
       allow write: if isMaster();
     }
   }
 }
+
