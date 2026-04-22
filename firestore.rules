@@ -39,8 +39,11 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (isAdmin() || request.auth.uid == userId);
       // Anyone can register
       allow create: if true; 
-      // Users can update their own profile, Master can update anyone
-      allow update: if isMaster() || request.auth.uid == userId;
+      // Users can update their own profile (excluding sensitive fields), Master can update anyone
+      allow update: if isMaster() || (
+        request.auth.uid == userId && 
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status', 'faculty', 'institution', 'regNumber'])
+      );
       // Only Master can delete users
       allow delete: if isMaster();
     }
