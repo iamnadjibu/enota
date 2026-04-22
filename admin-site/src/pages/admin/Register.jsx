@@ -2,7 +2,8 @@ import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { User, Mail, Lock, Eye, EyeOff, Building2, GraduationCap, Clock, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
 
 export default function Register() {
   const [showPassword, setShowPassword] = useState(false)
@@ -21,7 +22,14 @@ export default function Register() {
     institution: 'NAD CLASS'
   })
 
-  const { register } = useAuth()
+  const { register, currentUser, isApproved } = useAuth()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (currentUser && isApproved) {
+      navigate('/dashboard')
+    }
+  }, [currentUser, isApproved, navigate])
 
   const faculties = [
     'FILMMAKING AND VIDEO PRODUCTION',

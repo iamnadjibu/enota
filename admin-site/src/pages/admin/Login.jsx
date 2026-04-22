@@ -4,6 +4,7 @@ import { Mail, Lock, LogIn, AlertCircle, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { Link, useNavigate } from 'react-router-dom'
 import { useBranding } from '../../context/BrandingContext'
+import { useEffect } from 'react'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -11,9 +12,15 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const { login, register } = useAuth()
+  const { login, register, currentUser, isApproved } = useAuth()
   const { branding } = useBranding()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (currentUser && isApproved) {
+      navigate('/dashboard')
+    }
+  }, [currentUser, isApproved, navigate])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
