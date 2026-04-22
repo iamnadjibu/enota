@@ -5,6 +5,7 @@ import Contact from './pages/public/Contact'
 import Marks from './pages/public/Marks'
 import Materials from './pages/public/Materials'
 import Register from './pages/public/Register'
+import Login from './pages/public/Login'
 import { AuthProvider } from './context/AuthContext'
 import { BrandingProvider } from './context/BrandingContext'
 
@@ -19,6 +20,7 @@ function App() {
           <Route path="/marks" element={<Marks />} />
           <Route path="/materials" element={<Materials />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/login" element={<Login />} />
           <Route path="*" element={<Home />} />
         </Routes>
       </BrandingProvider>

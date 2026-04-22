@@ -4,6 +4,7 @@ import { Menu, X, Instagram, Youtube, Twitter, MessageCircle, Mail, MapPin } fro
 import { motion, AnimatePresence } from 'framer-motion'
 import { useBranding } from '../context/BrandingContext'
 import { doc, onSnapshot } from 'firebase/firestore'
+import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 
 export default function PublicLayout({ children }) {
@@ -11,6 +12,7 @@ export default function PublicLayout({ children }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const location = useLocation()
   const [dynamicNav, setDynamicNav] = useState([])
+  const { currentUser, logout } = useAuth()
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'siteConfig', 'navigation'), (docSnap) => {
@@ -85,7 +87,17 @@ export default function PublicLayout({ children }) {
               </Link>
             )
           ))}
-          <Link to="/register" className="btn-primary py-2 text-sm px-6">JOIN SYSTEM</Link>
+          {currentUser ? (
+            <div className="flex items-center gap-4">
+              <span className="text-xs font-bold text-accent uppercase tracking-widest">{currentUser.displayName || 'User'}</span>
+              <button onClick={logout} className="btn-outline py-2 text-sm px-6">LOG OUT</button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-4">
+              <Link to="/login" className="text-sm font-bold tracking-widest text-white/80 hover:text-accent transition-colors">LOG IN</Link>
+              <Link to="/register" className="btn-primary py-2 text-sm px-6">JOIN SYSTEM</Link>
+            </div>
+          )}
         </div>
 
         {/* Mobile menu toggle */}
@@ -127,7 +139,17 @@ export default function PublicLayout({ children }) {
                 </Link>
               )
             ))}
-            <Link to="/register" onClick={() => setIsMenuOpen(false)} className="btn-primary mt-4 px-12 py-4">JOIN SYSTEM</Link>
+            {currentUser ? (
+               <div className="flex flex-col items-center gap-4 mt-4">
+                  <span className="text-lg font-bold text-accent uppercase tracking-widest">{currentUser.displayName || 'User'}</span>
+                  <button onClick={() => { logout(); setIsMenuOpen(false); }} className="btn-outline px-12 py-4">LOG OUT</button>
+               </div>
+            ) : (
+               <div className="flex flex-col items-center gap-4 mt-4">
+                  <Link to="/login" onClick={() => setIsMenuOpen(false)} className="text-3xl font-display font-bold text-white hover:text-accent transition-colors">LOG IN</Link>
+                  <Link to="/register" onClick={() => setIsMenuOpen(false)} className="btn-primary px-12 py-4">JOIN SYSTEM</Link>
+               </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

@@ -272,9 +272,9 @@ export default function Register() {
                        {!loading && <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" /> }
                      </button>
 
-                     <p className="text-center text-xs text-white/40 mt-8">
-                       Already have an account? <Link to="/materials" className="text-accent underline font-bold uppercase tracking-widest">Sign In</Link>
-                     </p>
+                      <p className="text-center text-xs text-white/40 mt-8">
+                        Already have an account? <Link to="/login" className="text-accent underline font-bold uppercase tracking-widest">Sign In</Link>
+                      </p>
                    </form>
                 </motion.div>
               )}

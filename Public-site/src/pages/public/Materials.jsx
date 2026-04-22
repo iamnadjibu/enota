@@ -14,50 +14,38 @@ import {
   HelpCircle,
   Dna,
   Layout,
-  ExternalLink
+  ExternalLink,
+  Lock,
+  LogIn
 } from 'lucide-react'
 import PublicLayout from '../../layouts/PublicLayout'
 import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '../../firebase'
+import { useAuth } from '../../context/AuthContext'
+import { Link } from 'react-router-dom'
 
 export default function Materials() {
-  const [regNumber, setRegNumber] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [userData, setUserData] = useState(null)
-  const [error, setError] = useState('')
+  const { currentUser, userData: authUserData } = useAuth()
+  const [loading, setLoading] = useState(true)
   const [courses, setCourses] = useState([])
   const [expandedUnit, setExpandedUnit] = useState(null)
   const [previewItem, setPreviewItem] = useState(null)
 
-  const checkRegistration = async (e) => {
-    e.preventDefault()
-    if (!regNumber.trim()) return
-    setLoading(true)
-    setError('')
-    
-    // Simulate lookup or fetch from Firestore
-    // For this implementation, we'll fetch from 'users' collection
-    const usersRef = collection(db, 'users')
-    const q = query(usersRef, where('regNumber', '==', regNumber.trim()))
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      if (!snapshot.empty) {
-        setUserData(snapshot.docs[0].data())
-        fetchCourses(snapshot.docs[0].data().faculty)
-      } else {
-        setError('Reg Number not found. Please register first.')
-        setLoading(false)
-      }
-    })
-  }
+  useEffect(() => {
+    if (!currentUser || !authUserData?.faculty) {
+      setLoading(false)
+      return
+    }
 
-  const fetchCourses = (faculty) => {
-    const q = query(collection(db, 'courses'), where('faculties', 'array-contains', faculty))
-    onSnapshot(q, (snapshot) => {
+    setLoading(true)
+    const q = query(collection(db, 'courses'), where('faculties', 'array-contains', authUserData.faculty))
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       setCourses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
       setLoading(false)
     })
-  }
+
+    return () => unsubscribe()
+  }, [currentUser, authUserData])
 
 
   const getDrivePreview = (url) => {
@@ -73,10 +61,20 @@ export default function Materials() {
     return match ? `https://www.youtube.com/embed/${match[1]}?autoplay=1` : null
   }
 
+  if (loading) {
+    return (
+      <PublicLayout>
+        <div className="min-h-[80vh] flex items-center justify-center">
+           <div className="w-12 h-12 border-4 border-accent border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      </PublicLayout>
+    )
+  }
+
   return (
     <PublicLayout>
       <div className="max-w-7xl mx-auto px-6 lg:px-12 py-20 min-h-[80vh]">
-        {!userData ? (
+        {!currentUser ? (
           <div className="max-w-2xl mx-auto text-center space-y-12">
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>
               <div className="inline-flex items-center gap-2 bg-accent/10 border border-accent/20 rounded-full px-4 py-1.5 mb-8 text-xs font-bold text-accent uppercase tracking-widest">
@@ -85,46 +83,43 @@ export default function Materials() {
               <h1 className="text-4xl md:text-6xl font-display font-extrabold mb-6 tracking-tight">
                 Access <span className="text-accent">Learning</span> Vault
               </h1>
-              <p className="text-white/40 text-lg max-w-lg mx-auto">
-                Enter your university-issued Registration Number to unlock your faculty's exclusive materials.
+              <p className="text-white/40 text-lg max-w-lg mx-auto mb-10">
+                You must be logged in to access your faculty's exclusive learning materials and handouts.
               </p>
+              
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <Link to="/login" className="btn-primary py-4 px-10 rounded-2xl text-sm font-bold uppercase tracking-widest flex items-center gap-2">
+                  <LogIn size={18} /> Sign In to Access
+                </Link>
+                <Link to="/register" className="btn-outline py-4 px-10 rounded-2xl text-sm font-bold uppercase tracking-widest">
+                  Create Account
+                </Link>
+              </div>
             </motion.div>
 
-            <form onSubmit={checkRegistration} className="relative group">
-               <div className="flex items-center glass p-2 rounded-[32px] border-white/10 focus-within:border-accent/40 transition-all shadow-2xl">
-                  <Search className="ml-6 text-white/20" size={24} />
-                  <input 
-                    type="text" 
-                    value={regNumber}
-                    onChange={(e) => setRegNumber(e.target.value)}
-                    placeholder="Reg Number (e.g. NAD-2024-001)"
-                    className="flex-grow bg-transparent border-none py-6 px-6 text-white text-lg font-bold focus:outline-none"
-                  />
-                  <button 
-                    disabled={loading}
-                    className="btn-primary py-4 px-10 rounded-2xl text-sm font-bold uppercase tracking-widest disabled:opacity-50"
-                  >
-                    {loading ? 'Verifying...' : 'Unlock'}
-                  </button>
-               </div>
-            </form>
-
-            {error && <p className="text-red-400 font-bold flex items-center justify-center gap-2"><AlertCircle size={18} /> {error}</p>}
+            <div className="pt-20 opacity-20 flex justify-center gap-12">
+               <BookOpen size={48} />
+               <Lock size={48} />
+               <FileText size={48} />
+            </div>
           </div>
         ) : (
           <div className="space-y-12">
             {/* Student Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-white/5 pb-10">
                <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-                  <p className="text-accent text-[10px] font-bold uppercase tracking-[0.3em] mb-3">Trainee Session Active</p>
-                  <h2 className="text-4xl font-display font-bold mb-2">{userData.firstName} {userData.lastName}</h2>
+                  <p className="text-accent text-[10px] font-bold uppercase tracking-[0.3em] mb-3">Student Session Active</p>
+                  <h2 className="text-4xl font-display font-bold mb-2">{authUserData?.firstName} {authUserData?.lastName}</h2>
                   <div className="flex items-center gap-4 text-white/40 text-sm">
-                    <span className="flex items-center gap-1.5"><Folder size={14} className="text-accent" /> {userData.faculty}</span>
+                    <span className="flex items-center gap-1.5"><Folder size={14} className="text-accent" /> {authUserData?.faculty}</span>
                     <span className="w-1.5 h-1.5 rounded-full bg-white/20"></span>
-                    <span>{userData.regNumber}</span>
+                    <span>{authUserData?.regNumber}</span>
                   </div>
                </motion.div>
-               <button onClick={() => setUserData(null)} className="btn-outline py-2 px-6 text-[10px] font-bold uppercase">Exit Portal</button>
+               <div className="flex items-center gap-2 text-[10px] font-bold text-white/40 uppercase tracking-widest bg-white/5 px-4 py-2 rounded-full border border-white/10">
+                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                  Logged In
+               </div>
             </div>
 
             {/* Courses View */}
@@ -194,7 +189,7 @@ export default function Materials() {
                   {courses.length === 0 && (
                     <div className="py-20 glass rounded-[40px] border border-white/5 text-center">
                        <BookOpen size={48} className="mx-auto text-white/10 mb-4" />
-                       <p className="text-white/40 text-sm">No Available materials at the moment.</p>
+                       <p className="text-white/40 text-sm">No Available materials for {authUserData?.faculty} at the moment.</p>
                     </div>
                   )}
                </div>
