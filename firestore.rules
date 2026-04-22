@@ -2,47 +2,55 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Function to check if user is authenticated
+    // --- HELPERS ---
+
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    // Function to check if user is the Master Admin
     function isMaster() {
       return isAuthenticated() && request.auth.token.email == "nadjibullahu@gmail.com";
     }
 
-    // Function to check if user is an approved Admin
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
     function isAdmin() {
       return isAuthenticated() && (
         isMaster() || (
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin" &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == "active"
+          getUserData().role == "admin" &&
+          getUserData().status == "active"
         )
       );
     }
 
-    // Function to check if user is admin of a specific faculty
     function isFacultyAdmin(faculty) {
       return isMaster() || (
-        isAdmin() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.faculty == faculty
+        isAdmin() && getUserData().faculty == faculty
       );
     }
 
+    // --- COLLECTIONS ---
+
     // Users Collection
     match /users/{userId} {
+      // Admins can see all users, users can see themselves
       allow read: if isAuthenticated() && (isAdmin() || request.auth.uid == userId);
-      allow create: if true; // Allow self-registration
+      // Anyone can register
+      allow create: if true; 
+      // Users can update their own profile, Master can update anyone
       allow update: if isMaster() || request.auth.uid == userId;
+      // Only Master can delete users
       allow delete: if isMaster();
     }
 
-    // Marks Collection
+    // Marks Collection (Public Access for Searching)
     match /marks/{markId} {
-      // Allows students to search by Reg Number without login
+      // Requirement: Users can search for marks without logging in
       allow read: if true; 
       
-      // Scoped write access based on faculty for regular admins
+      // Writes restricted to Master or Faculty Admins
       allow create: if isMaster() || isFacultyAdmin(request.resource.data.faculty);
       allow update: if isMaster() || isFacultyAdmin(resource.data.faculty);
       allow delete: if isMaster();
@@ -50,28 +58,33 @@ service cloud.firestore {
 
     // Courses/Materials Collection
     match /courses/{courseId} {
-      // Public read for curriculum materials
-      allow read: if true;
+      // Requirement: Access materials in their faculty that they have signed up in
+      // Admins can see all courses
+      // Students must be logged in and the course must belong to their faculty
+      allow read: if isAdmin() || (
+        isAuthenticated() && 
+        resource.data.faculties.hasAny([getUserData().faculty])
+      );
       
-      // Faculty-scoped management
+      // Writes restricted to Master or Faculty Admins
       allow create: if isMaster() || isFacultyAdmin(request.resource.data.faculty);
       allow update: if isMaster() || isFacultyAdmin(resource.data.faculty);
       allow delete: if isMaster() || isFacultyAdmin(resource.data.faculty);
     }
 
-    // Settings/Branding Collection
+    // Settings/Branding
     match /settings/{settingId} {
       allow read: if true;
       allow write: if isMaster();
     }
 
-    // Site Configurations (Navigation, etc.)
+    // Site Configurations
     match /siteConfig/{docId} {
       allow read: if true;
       allow write: if isMaster();
     }
     
-    // Global University Configurations
+    // Metadata Collections
     match /faculties/{facultyId} {
       allow read: if true;
       allow write: if isMaster();
