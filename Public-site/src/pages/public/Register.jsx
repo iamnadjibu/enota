@@ -22,7 +22,7 @@ export default function Register() {
     email: '',
     password: '',
     confirmPassword: '',
-    faculty: '',
+    faculty: [],
     institution: ''
   })
 
@@ -34,9 +34,6 @@ export default function Register() {
     const unsubFaculties = onSnapshot(query(collection(db, 'faculties'), orderBy('name')), (snapshot) => {
       const list = snapshot.docs.map(doc => doc.data().name)
       setUniversityFaculties(list)
-      if (list.length > 0 && !formData.faculty) {
-        setFormData(prev => ({ ...prev, faculty: list[0] }))
-      }
     })
     const unsubInstitutions = onSnapshot(query(collection(db, 'institutions'), orderBy('name')), (snapshot) => {
       const list = snapshot.docs.map(doc => doc.data().name)
@@ -58,6 +55,8 @@ export default function Register() {
     e.preventDefault()
     setError('')
 
+    if (!formData.faculty || formData.faculty.length === 0) return setError('Please select at least one faculty.')
+    if (!formData.institution) return setError('Please select an institution.')
     if (formData.password !== formData.confirmPassword) {
       return setError('Passwords do not match.')
     }
@@ -207,11 +206,17 @@ export default function Register() {
                          <div className="relative">
                             <GraduationCap className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
                             <select 
-                              className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 focus:outline-none focus:border-accent transition-colors appearance-none"
-                              value={formData.faculty} onChange={(e) => setFormData({...formData, faculty: e.target.value})}
+                              multiple
+                              size={4}
+                              className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 focus:outline-none focus:border-accent transition-colors"
+                              value={formData.faculty} 
+                              onChange={(e) => {
+                                const options = Array.from(e.target.selectedOptions, option => option.value)
+                                setFormData({...formData, faculty: options})
+                              }}
                             >
                               {universityFaculties.length > 0 ? (
-                                universityFaculties.map(f => <option key={f} value={f} className="bg-background">{f}</option>)
+                                universityFaculties.map(f => <option key={f} value={f} className="bg-background hover:bg-white/10 p-2 rounded-lg">{f}</option>)
                               ) : (
                                 <option disabled className="bg-background">Loading Faculties...</option>
                               )}

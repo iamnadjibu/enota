@@ -23,7 +23,7 @@ export default function Register() {
     email: '',
     password: '',
     confirmPassword: '',
-    faculty: '',
+    faculty: [],
     institution: ''
   })
 
@@ -59,9 +59,6 @@ export default function Register() {
         setInstitutions(fetchedInstitutions)
 
         // Set defaults to first item if available
-        if (fetchedFaculties.length > 0) {
-          setFormData(prev => ({ ...prev, faculty: fetchedFaculties[0].name }))
-        }
         if (fetchedInstitutions.length > 0) {
           setFormData(prev => ({ ...prev, institution: fetchedInstitutions[0].name }))
         }
@@ -80,7 +77,7 @@ export default function Register() {
     e.preventDefault()
     setError('')
 
-    if (!formData.faculty) return setError('Please select a faculty.')
+    if (!formData.faculty || formData.faculty.length === 0) return setError('Please select at least one faculty.')
     if (!formData.institution) return setError('Please select an institution.')
     if (formData.password !== formData.confirmPassword) {
       return setError('Passwords do not match.')
@@ -198,12 +195,17 @@ export default function Register() {
                     ) : (
                       <select 
                         required
-                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 focus:outline-none focus:border-accent transition-colors appearance-none text-sm"
-                        value={formData.faculty} onChange={(e) => setFormData({...formData, faculty: e.target.value})}
+                        multiple
+                        size={4}
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 focus:outline-none focus:border-accent transition-colors text-sm"
+                        value={formData.faculty} 
+                        onChange={(e) => {
+                          const options = Array.from(e.target.selectedOptions, option => option.value)
+                          setFormData({...formData, faculty: options})
+                        }}
                       >
-                        <option value="" className="bg-background">— Select Faculty —</option>
                         {faculties.map(f => (
-                          <option key={f.id} value={f.name} className="bg-background">{f.name}</option>
+                          <option key={f.id} value={f.name} className="bg-background hover:bg-white/10 p-2 rounded-lg">{f.name}</option>
                         ))}
                       </select>
                     )}
