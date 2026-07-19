@@ -56,7 +56,16 @@ export default function Materials() {
     }
 
     setLoading(true)
-    const q = query(collection(db, 'courses'), where('faculties', 'array-contains', authUserData.faculty))
+    let q;
+    if (Array.isArray(authUserData.faculty)) {
+      if (authUserData.faculty.length > 0) {
+        q = query(collection(db, 'courses'), where('faculties', 'array-contains-any', authUserData.faculty))
+      } else {
+        q = query(collection(db, 'courses'), where('faculties', 'array-contains', 'NONE'))
+      }
+    } else {
+      q = query(collection(db, 'courses'), where('faculties', 'array-contains', authUserData.faculty))
+    }
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setCourses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
       setLoading(false)
@@ -152,7 +161,7 @@ export default function Materials() {
                   <p className="text-accent text-[10px] font-bold uppercase tracking-[0.3em] mb-3">Student Session Active</p>
                   <h2 className="text-4xl font-display font-bold mb-2">{authUserData?.firstName} {authUserData?.lastName}</h2>
                   <div className="flex items-center gap-4 text-white/40 text-sm">
-                    <span className="flex items-center gap-1.5"><Folder size={14} className="text-accent" /> {authUserData?.faculty}</span>
+                    <span className="flex items-center gap-1.5"><Folder size={14} className="text-accent" /> {Array.isArray(authUserData?.faculty) ? authUserData.faculty.join(', ') : authUserData?.faculty}</span>
                     <span className="w-1.5 h-1.5 rounded-full bg-white/20"></span>
                     <span>{authUserData?.regNumber}</span>
                   </div>
