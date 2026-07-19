@@ -20,6 +20,7 @@ import { useAuth } from '../../context/AuthContext'
 
 export default function MarksManager() {
   const { isMaster, userData } = useAuth()
+  const adminFaculties = Array.isArray(userData?.faculty) ? userData.faculty : [userData?.faculty].filter(Boolean)
   const [marks, setMarks] = useState([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -51,7 +52,7 @@ export default function MarksManager() {
     firstName: '',
     lastName: '',
     regNumber: '',
-    faculty: userData?.faculty || 'MULTIMEDIA PRODUCTION',
+    faculty: isMaster ? 'MULTIMEDIA PRODUCTION' : (adminFaculties[0] || 'MULTIMEDIA PRODUCTION'),
     institution: 'NAD CLASS',
     gender: 'Male',
     marks: {} // { 'Filmmaking': 85, 'Camera Operation': 90 }
@@ -72,8 +73,8 @@ export default function MarksManager() {
     let q = marksRef
     
     // If not master, filter by faculty
-    if (!isMaster && userData?.faculty && userData.faculty !== 'N/A') {
-      q = query(marksRef, where('faculty', '==', userData.faculty))
+    if (!isMaster && adminFaculties.length > 0 && !adminFaculties.includes('N/A')) {
+      q = query(marksRef, where('faculty', 'in', adminFaculties.slice(0, 10)))
     }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -418,7 +419,7 @@ export default function MarksManager() {
                 firstName: '',
                 lastName: '',
                 regNumber: '',
-                faculty: userData?.faculty || 'MULTIMEDIA PRODUCTION',
+                faculty: isMaster ? 'MULTIMEDIA PRODUCTION' : (adminFaculties[0] || 'MULTIMEDIA PRODUCTION'),
                 institution: 'NAD CLASS',
                 gender: 'Male',
                 marks: {}
@@ -647,11 +648,24 @@ export default function MarksManager() {
                               <option key={f} value={f} className="bg-background">{f}</option>
                             ))
                           ) : (
-                            <option value={userData?.faculty} className="bg-background">{userData?.faculty}</option>
+                            <option value={adminFaculties[0]} className="bg-background">{adminFaculties[0]}</option>
                           )}
                           <option value="N/A" className="bg-background">Other/General</option>
                         </select>
 
+                      ) : adminFaculties.length > 1 ? (
+                        <select 
+                         className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm appearance-none"
+                         value={formData.faculty} 
+                         onChange={(e) => {
+                           setFormData({...formData, faculty: e.target.value, marks: {}})
+                           setSelectedCourses([])
+                         }}
+                         >
+                          {adminFaculties.map(f => (
+                            <option key={f} value={f} className="bg-background">{f}</option>
+                          ))}
+                        </select>
                       ) : (
                         <input 
                          type="text" disabled 

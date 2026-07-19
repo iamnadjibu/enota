@@ -18,7 +18,12 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [expandedFaculty, setExpandedFaculty] = useState(null)
   
-  // Master Admin can select 'All' or a specific faculty
+  const adminFaculties = useMemo(() => {
+    if (!userData?.faculty) return []
+    return Array.isArray(userData.faculty) ? userData.faculty : [userData.faculty]
+  }, [userData?.faculty])
+
+  // Master Admin or Admin with multiple faculties can select 'All' or a specific faculty
   const [selectedFacultyFilter, setSelectedFacultyFilter] = useState('All')
 
   useEffect(() => {
@@ -42,8 +47,10 @@ export default function Dashboard() {
         let q = marksRef
         
         // Non-masters only get their faculty's data
-        if (!isMaster && userData?.faculty && userData.faculty !== 'N/A') {
-          q = query(marksRef, where('faculty', '==', userData.faculty))
+        if (!isMaster && adminFaculties.length > 0) {
+          if (!adminFaculties.includes('N/A')) {
+             q = query(marksRef, where('faculty', 'in', adminFaculties.slice(0, 10)))
+          }
         }
 
         const querySnapshot = await getDocs(q)
@@ -145,7 +152,7 @@ export default function Dashboard() {
           <p className="text-white/40 text-sm mt-1">Here's a summary of class performances today.</p>
         </div>
         <div className="flex items-center gap-4 flex-wrap">
-          {isMaster && (
+          {(isMaster || adminFaculties.length > 1) && (
             <div className="relative">
               <select 
                 className="appearance-none bg-white/5 border border-white/10 rounded-2xl py-3 pl-4 pr-10 text-sm font-bold text-accent focus:outline-none focus:border-accent cursor-pointer"
@@ -153,7 +160,7 @@ export default function Dashboard() {
                 onChange={(e) => setSelectedFacultyFilter(e.target.value)}
               >
                 <option value="All" className="bg-background text-white">All Faculties</option>
-                {faculties.map(f => (
+                {(isMaster ? faculties : adminFaculties).map(f => (
                   <option key={f} value={f} className="bg-background text-white">{f}</option>
                 ))}
               </select>
@@ -259,7 +266,7 @@ export default function Dashboard() {
             {!isMaster && <span className="text-[10px] bg-white/5 px-2 py-1 rounded text-white/40 uppercase tracking-widest">My Faculty Only</span>}
          </div>
          <div className="space-y-4">
-            {(isMaster ? faculties : [userData?.faculty]).map((faculty, i) => {
+            {(isMaster ? faculties : adminFaculties).map((faculty, i) => {
               if (!faculty) return null
               const fStats = getFacultyStats(faculty)
               return (
