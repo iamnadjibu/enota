@@ -6,7 +6,8 @@ import {
   signOut, 
   createUserWithEmailAndPassword, 
   updateProfile,
-  sendEmailVerification
+  sendEmailVerification,
+  sendPasswordResetEmail
 } from 'firebase/auth'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 
@@ -49,6 +50,10 @@ export function AuthProvider({ children }) {
     return signOut(auth)
   }
 
+  function resetPassword(email) {
+    return sendPasswordResetEmail(auth, email)
+  }
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -73,7 +78,8 @@ export function AuthProvider({ children }) {
     userData,
     register,
     login,
-    logout
+    logout,
+    resetPassword
   }
 
   return (

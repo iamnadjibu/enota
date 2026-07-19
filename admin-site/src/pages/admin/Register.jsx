@@ -1,16 +1,21 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { User, Mail, Lock, Eye, EyeOff, Building2, GraduationCap, Clock, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react'
+import { User, Mail, Lock, Eye, EyeOff, Building2, GraduationCap, Clock, AlertCircle, ArrowRight, Loader2 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { Link, useNavigate } from 'react-router-dom'
-import { useEffect } from 'react'
+import { db } from '../../firebase'
+import { collection, getDocs, query, orderBy } from 'firebase/firestore'
 
 export default function Register() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
-  
+
+  const [faculties, setFaculties] = useState([])
+  const [institutions, setInstitutions] = useState([])
+  const [loadingOptions, setLoadingOptions] = useState(true)
+
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -18,8 +23,8 @@ export default function Register() {
     email: '',
     password: '',
     confirmPassword: '',
-    faculty: 'FILMMAKING AND VIDEO PRODUCTION',
-    institution: 'NAD CLASS'
+    faculty: '',
+    institution: ''
   })
 
   const { register, currentUser, isApproved } = useAuth()
@@ -31,24 +36,52 @@ export default function Register() {
     }
   }, [currentUser, isApproved, navigate])
 
-  const faculties = [
-    'FILMMAKING AND VIDEO PRODUCTION',
-    'MULTIMEDIA PRODUCTION',
-    'COLOR GRADING',
-    'AI FILMMAKING',
-    'VIBE CODING'
-  ]
+  // Fetch faculties and institutions from Firestore
+  useEffect(() => {
+    const fetchOptions = async () => {
+      setLoadingOptions(true)
+      try {
+        const [facultiesSnap, institutionsSnap] = await Promise.all([
+          getDocs(query(collection(db, 'faculties'), orderBy('name'))),
+          getDocs(query(collection(db, 'institutions'), orderBy('name')))
+        ])
 
-  const institutions = [
-    'NAD CLASS',
-    'KSP RWANDA',
-    'NAD PRODUCTION'
-  ]
+        const fetchedFaculties = facultiesSnap.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+        const fetchedInstitutions = institutionsSnap.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+
+        setFaculties(fetchedFaculties)
+        setInstitutions(fetchedInstitutions)
+
+        // Set defaults to first item if available
+        if (fetchedFaculties.length > 0) {
+          setFormData(prev => ({ ...prev, faculty: fetchedFaculties[0].name }))
+        }
+        if (fetchedInstitutions.length > 0) {
+          setFormData(prev => ({ ...prev, institution: fetchedInstitutions[0].name }))
+        }
+      } catch (err) {
+        console.error('Failed to load faculties/institutions:', err)
+        setError('Failed to load faculty and institution options. Please refresh the page.')
+      } finally {
+        setLoadingOptions(false)
+      }
+    }
+
+    fetchOptions()
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
 
+    if (!formData.faculty) return setError('Please select a faculty.')
+    if (!formData.institution) return setError('Please select an institution.')
     if (formData.password !== formData.confirmPassword) {
       return setError('Passwords do not match.')
     }
@@ -109,10 +142,10 @@ export default function Register() {
                   <div className="relative">
                     <User className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
                     <input 
-                    type="text" required placeholder="John" 
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 focus:outline-none focus:border-accent transition-colors text-sm"
-                    value={formData.firstName} onChange={(e) => setFormData({...formData, firstName: e.target.value})}
-                  />
+                      type="text" required placeholder="John" 
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 focus:outline-none focus:border-accent transition-colors text-sm"
+                      value={formData.firstName} onChange={(e) => setFormData({...formData, firstName: e.target.value})}
+                    />
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -120,10 +153,10 @@ export default function Register() {
                   <div className="relative">
                     <User className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
                     <input 
-                    type="text" required placeholder="Doe" 
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 focus:outline-none focus:border-accent transition-colors text-sm"
-                    value={formData.lastName} onChange={(e) => setFormData({...formData, lastName: e.target.value})}
-                  />
+                      type="text" required placeholder="Doe" 
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 focus:outline-none focus:border-accent transition-colors text-sm"
+                      value={formData.lastName} onChange={(e) => setFormData({...formData, lastName: e.target.value})}
+                    />
                   </div>
                 </div>
               </div>
@@ -153,28 +186,51 @@ export default function Register() {
               </div>
 
               <div className="grid sm:grid-cols-2 gap-6">
+                {/* Faculty — fetched from Firestore */}
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Faculty</label>
                   <div className="relative">
                     <GraduationCap className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
-                    <select 
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 focus:outline-none focus:border-accent transition-colors appearance-none text-sm"
-                      value={formData.faculty} onChange={(e) => setFormData({...formData, faculty: e.target.value})}
-                    >
-                      {faculties.map(f => <option key={f} value={f} className="bg-background">{f}</option>)}
-                    </select>
+                    {loadingOptions ? (
+                      <div className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 flex items-center gap-2 text-white/30 text-sm">
+                        <Loader2 size={16} className="animate-spin" /> Loading...
+                      </div>
+                    ) : (
+                      <select 
+                        required
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 focus:outline-none focus:border-accent transition-colors appearance-none text-sm"
+                        value={formData.faculty} onChange={(e) => setFormData({...formData, faculty: e.target.value})}
+                      >
+                        <option value="" className="bg-background">— Select Faculty —</option>
+                        {faculties.map(f => (
+                          <option key={f.id} value={f.name} className="bg-background">{f.name}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                 </div>
+
+                {/* Institution — fetched from Firestore */}
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Institution</label>
                   <div className="relative">
                     <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
-                    <select 
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 focus:outline-none focus:border-accent transition-colors appearance-none text-sm"
-                      value={formData.institution} onChange={(e) => setFormData({...formData, institution: e.target.value})}
-                    >
-                      {institutions.map(i => <option key={i} value={i} className="bg-background">{i}</option>)}
-                    </select>
+                    {loadingOptions ? (
+                      <div className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 flex items-center gap-2 text-white/30 text-sm">
+                        <Loader2 size={16} className="animate-spin" /> Loading...
+                      </div>
+                    ) : (
+                      <select 
+                        required
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 focus:outline-none focus:border-accent transition-colors appearance-none text-sm"
+                        value={formData.institution} onChange={(e) => setFormData({...formData, institution: e.target.value})}
+                      >
+                        <option value="" className="bg-background">— Select Institution —</option>
+                        {institutions.map(i => (
+                          <option key={i.id} value={i.name} className="bg-background">{i.name}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                 </div>
               </div>
@@ -207,9 +263,9 @@ export default function Register() {
               </div>
 
               <button 
-                disabled={loading}
+                disabled={loading || loadingOptions}
                 type="submit" 
-                className="btn-primary w-full py-4 text-sm font-bold flex items-center justify-center gap-2 group mt-4 shadow-lg shadow-primary/20"
+                className="btn-primary w-full py-4 text-sm font-bold flex items-center justify-center gap-2 group mt-4 shadow-lg shadow-primary/20 disabled:opacity-50"
               >
                 {loading ? 'Submitting Application...' : 'Send Application'}
                 {!loading && <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />}

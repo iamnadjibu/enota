@@ -48,6 +48,10 @@ export function AuthProvider({ children }) {
     return signOut(auth)
   }
 
+  function resetPassword(email) {
+    return sendPasswordResetEmail(auth, email)
+  }
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -86,6 +90,7 @@ export function AuthProvider({ children }) {
     register,
     login,
     logout,
+    resetPassword,
     isAdmin: userData?.role === 'admin' || userData?.email === 'nadjibullahu@gmail.com',
     isMaster: userData?.email === 'nadjibullahu@gmail.com',
     isApproved: userData?.status === 'active' || userData?.email === 'nadjibullahu@gmail.com'
