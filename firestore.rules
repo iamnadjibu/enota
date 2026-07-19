@@ -73,13 +73,10 @@ service cloud.firestore {
 
     // Courses/Materials Collection
     match /courses/{courseId} {
-      // Requirement: Access materials in their faculty that they have signed up in
+      // Requirement: Access materials in their faculty that they have signed up in (Filtered on UI)
       // Admins can see all courses
-      // Students must be logged in and the course must belong to their faculty
-      allow read: if isAdmin() || (
-        isAuthenticated() && 
-        userHasAnyFaculty(resource.data.faculties)
-      );
+      // Students must be logged in
+      allow read: if isAuthenticated();
       
       // Writes restricted to Master or Faculty Admins
       // We check if the admin has the legacy primary faculty or any of the faculties in the array
