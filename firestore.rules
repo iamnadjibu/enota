@@ -25,10 +25,21 @@ service cloud.firestore {
       );
     }
 
-    function isFacultyAdmin(faculty) {
+    function userHasFaculty(facultyStr) {
+      let userFac = getUserData().faculty;
+      return (userFac is list && facultyStr in userFac) || (userFac == facultyStr);
+    }
+
+    function isFacultyAdmin(facultyStr) {
       return isMaster() || (
-        isAdmin() && getUserData().faculty == faculty
+        isAdmin() && userHasFaculty(facultyStr)
       );
+    }
+
+    function userHasAnyFaculty(courseFacultiesList) {
+      let userFac = getUserData().faculty;
+      return (userFac is list && courseFacultiesList.hasAny(userFac)) ||
+             (! (userFac is list) && courseFacultiesList.hasAny([userFac]));
     }
 
     // --- COLLECTIONS ---
@@ -53,9 +64,10 @@ service cloud.firestore {
       // Requirement: Users can search for marks without logging in
       allow read: if true; 
       
-      // Writes restricted to Master or Faculty Admins
+      // Admins can add marks for students in their faculty
       allow create: if isMaster() || isFacultyAdmin(request.resource.data.faculty);
-      allow update: if isMaster() || isFacultyAdmin(resource.data.faculty);
+      // But they cannot edit them, only Superadmin can
+      allow update: if isMaster();
       allow delete: if isMaster();
     }
 
@@ -66,13 +78,14 @@ service cloud.firestore {
       // Students must be logged in and the course must belong to their faculty
       allow read: if isAdmin() || (
         isAuthenticated() && 
-        resource.data.faculties.hasAny([getUserData().faculty])
+        userHasAnyFaculty(resource.data.faculties)
       );
       
       // Writes restricted to Master or Faculty Admins
-      allow create: if isMaster() || isFacultyAdmin(request.resource.data.faculty);
-      allow update: if isMaster() || isFacultyAdmin(resource.data.faculty);
-      allow delete: if isMaster() || isFacultyAdmin(resource.data.faculty);
+      // We check if the admin has the legacy primary faculty or any of the faculties in the array
+      allow create: if isMaster() || isFacultyAdmin(request.resource.data.faculty) || (isAdmin() && userHasAnyFaculty(request.resource.data.faculties));
+      allow update: if isMaster() || isFacultyAdmin(resource.data.faculty) || (isAdmin() && userHasAnyFaculty(resource.data.faculties));
+      allow delete: if isMaster() || isFacultyAdmin(resource.data.faculty) || (isAdmin() && userHasAnyFaculty(resource.data.faculties));
     }
 
     // Settings/Branding

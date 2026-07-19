@@ -33,7 +33,7 @@ export default function MaterialsManager() {
   // Form State
   const [formData, setFormData] = useState({
     title: '',
-    faculties: userData?.faculty ? [userData.faculty] : ['MULTIMEDIA PRODUCTION'],
+    faculties: userData?.faculty ? (Array.isArray(userData.faculty) ? userData.faculty : [userData.faculty]) : ['MULTIMEDIA PRODUCTION'],
     description: '',
     units: []
   })
@@ -47,11 +47,20 @@ export default function MaterialsManager() {
     // Wait for userData if not Master
     if (!isMaster && !userData?.faculty) return
 
-    const q = isMaster 
-      ? query(collection(db, 'courses'))
-      : query(collection(db, 'courses'), where('faculties', 'array-contains', userData?.faculty))
-
-
+    let q;
+    if (isMaster) {
+      q = query(collection(db, 'courses'));
+    } else {
+      if (Array.isArray(userData?.faculty)) {
+        if (userData.faculty.length > 0) {
+          q = query(collection(db, 'courses'), where('faculties', 'array-contains-any', userData.faculty));
+        } else {
+          q = query(collection(db, 'courses'), where('faculties', 'array-contains', 'NONE'));
+        }
+      } else {
+        q = query(collection(db, 'courses'), where('faculties', 'array-contains', userData?.faculty));
+      }
+    }
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setCourses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
       setLoading(false)
@@ -70,7 +79,7 @@ export default function MaterialsManager() {
   const handleCreateNew = () => {
     setFormData({
       title: '',
-      faculties: userData?.faculty ? [userData.faculty] : ['MULTIMEDIA PRODUCTION'],
+      faculties: userData?.faculty ? (Array.isArray(userData.faculty) ? userData.faculty : [userData.faculty]) : ['MULTIMEDIA PRODUCTION'],
       description: '',
       units: []
     })
@@ -204,7 +213,7 @@ export default function MaterialsManager() {
                         <button 
                           key={f}
                           type="button"
-                          disabled={!isMaster}
+                          disabled={!isMaster && !(Array.isArray(userData?.faculty) ? userData.faculty.includes(f) : userData?.faculty === f)}
                           onClick={() => {
                             const updated = formData.faculties.includes(f)
                               ? formData.faculties.filter(fac => fac !== f)
