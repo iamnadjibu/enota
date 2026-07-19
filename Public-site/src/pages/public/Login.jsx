@@ -21,22 +21,46 @@ export default function Login() {
   const [resetError, setResetError] = useState('')
   const [resetSent, setResetSent] = useState(false)
 
-  const { login, resetPassword } = useAuth()
+  const [unverified, setUnverified] = useState(false)
+  const [resending, setResending] = useState(false)
+  const [resendMsg, setResendMsg] = useState('')
+
+  const { login, resetPassword, resendVerificationLink } = useAuth()
   const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+    setUnverified(false)
+    setResendMsg('')
     setLoading(true)
 
     try {
-      await login(formData.email, formData.password)
-      navigate('/materials')
+      const res = await login(formData.email, formData.password)
+      if (!res.user.emailVerified) {
+        setError('Please verify your email before accessing the portal. Check your inbox or spam folder.')
+        setUnverified(true)
+      } else {
+        navigate('/materials')
+      }
     } catch (err) {
       console.error(err)
       setError('Failed to log in. Please check your credentials.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleResendVerification = async () => {
+    setResending(true)
+    setResendMsg('')
+    try {
+      await resendVerificationLink()
+      setResendMsg('Verification link sent successfully! Check your spam folder.')
+    } catch (err) {
+      setError('Failed to send verification link. Please try again.')
+    } finally {
+      setResending(false)
     }
   }
 
@@ -103,8 +127,27 @@ export default function Login() {
                 </div>
 
                 {error && (
-                  <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl text-red-400 flex items-center gap-2 text-sm">
-                    <AlertCircle size={18} /> {error}
+                  <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl text-red-400 flex flex-col gap-3 text-sm">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle size={18} className="mt-0.5 shrink-0" /> <p>{error}</p>
+                    </div>
+                    {unverified && (
+                      <div className="pl-6 pt-2">
+                        <button 
+                          type="button"
+                          onClick={handleResendVerification}
+                          disabled={resending}
+                          className="text-xs font-bold uppercase tracking-widest bg-red-500/20 hover:bg-red-500/30 text-white py-2 px-4 rounded-lg transition-colors"
+                        >
+                          {resending ? 'Sending...' : 'Resend Verification Link'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {resendMsg && (
+                  <div className="bg-accent/10 border border-accent/20 p-4 rounded-xl text-accent text-sm">
+                    {resendMsg}
                   </div>
                 )}
 

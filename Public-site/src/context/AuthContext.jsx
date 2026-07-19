@@ -38,8 +38,22 @@ export function AuthProvider({ children }) {
     }
 
     await setDoc(doc(db, 'users', res.user.uid), userDoc)
-    await sendEmailVerification(res.user)
+    
+    const actionCodeSettings = {
+      url: window.location.origin + '/login'
+    }
+    await sendEmailVerification(res.user, actionCodeSettings)
     return res.user
+  }
+
+  function resendVerificationLink() {
+    if (currentUser) {
+      const actionCodeSettings = {
+        url: window.location.origin + '/login'
+      }
+      return sendEmailVerification(currentUser, actionCodeSettings)
+    }
+    return Promise.reject(new Error("No user is currently logged in"))
   }
 
   function login(email, password) {
@@ -79,7 +93,8 @@ export function AuthProvider({ children }) {
     register,
     login,
     logout,
-    resetPassword
+    resetPassword,
+    resendVerificationLink
   }
 
   return (

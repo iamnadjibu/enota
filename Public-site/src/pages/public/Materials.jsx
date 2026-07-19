@@ -16,7 +16,8 @@ import {
   Layout,
   ExternalLink,
   Lock,
-  LogIn
+  LogIn,
+  Mail
 } from 'lucide-react'
 import PublicLayout from '../../layouts/PublicLayout'
 import { collection, query, where, onSnapshot } from 'firebase/firestore'
@@ -25,11 +26,28 @@ import { useAuth } from '../../context/AuthContext'
 import { Link } from 'react-router-dom'
 
 export default function Materials() {
-  const { currentUser, userData: authUserData } = useAuth()
+  const { currentUser, userData: authUserData, resendVerificationLink } = useAuth()
   const [loading, setLoading] = useState(true)
   const [courses, setCourses] = useState([])
   const [expandedUnit, setExpandedUnit] = useState(null)
   const [previewItem, setPreviewItem] = useState(null)
+  const [resending, setResending] = useState(false)
+  const [resendMsg, setResendMsg] = useState('')
+  const [resendError, setResendError] = useState('')
+
+  const handleResendVerification = async () => {
+    setResending(true)
+    setResendError('')
+    setResendMsg('')
+    try {
+      await resendVerificationLink()
+      setResendMsg('Verification link sent successfully! Check your spam folder.')
+    } catch (err) {
+      setResendError('Failed to send verification link. Please try again.')
+    } finally {
+      setResending(false)
+    }
+  }
 
   useEffect(() => {
     if (!currentUser || !authUserData?.faculty) {
@@ -102,6 +120,29 @@ export default function Materials() {
                <Lock size={48} />
                <FileText size={48} />
             </div>
+          </div>
+        ) : !currentUser.emailVerified ? (
+          <div className="max-w-2xl mx-auto text-center space-y-8 mt-10">
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="glass p-12 rounded-[40px] border border-accent/20">
+              <div className="w-20 h-20 rounded-full bg-accent/10 border border-accent/40 flex items-center justify-center text-accent mb-8 mx-auto">
+                <Mail size={40} />
+              </div>
+              <h1 className="text-4xl font-display font-extrabold mb-4">
+                Verify Your Email
+              </h1>
+              <p className="text-white/60 mb-8 max-w-md mx-auto">
+                You must verify your email address before accessing the materials. Please check your inbox or spam folder.
+              </p>
+              <button 
+                onClick={handleResendVerification}
+                disabled={resending}
+                className="btn-primary py-4 px-10 rounded-2xl text-sm font-bold uppercase tracking-widest w-full sm:w-auto"
+              >
+                {resending ? 'Sending...' : 'Resend Verification Link'}
+              </button>
+              {resendMsg && <p className="text-accent mt-6 text-sm bg-accent/10 p-4 rounded-xl border border-accent/20">{resendMsg}</p>}
+              {resendError && <p className="text-red-400 mt-6 text-sm bg-red-400/10 p-4 rounded-xl border border-red-400/20">{resendError}</p>}
+            </motion.div>
           </div>
         ) : (
           <div className="space-y-12">
