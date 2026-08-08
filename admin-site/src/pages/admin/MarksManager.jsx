@@ -389,11 +389,24 @@ export default function MarksManager() {
   }
 
 
-  const filteredMarks = marks.filter(mark => 
-    mark.firstName?.toLowerCase().includes(search.toLowerCase()) || 
-    mark.lastName?.toLowerCase().includes(search.toLowerCase()) ||
-    mark.regNumber?.toLowerCase().includes(search.toLowerCase())
-  )
+  const filteredMarks = marks.filter(mark => {
+    const q = search.trim().toLowerCase()
+    if (!q) return true
+    const fullName = `${mark.firstName || ''} ${mark.lastName || ''}`.toLowerCase()
+    const reg = (mark.regNumber || '').toLowerCase()
+    const faculty = (mark.faculty || '').toLowerCase()
+    const inst = (mark.institution || '').toLowerCase()
+    const grade = (mark.overallGrade || '').toLowerCase()
+    const courses = Object.keys(mark.marks || {}).join(' ').toLowerCase()
+    return (
+      fullName.includes(q) ||
+      reg.includes(q) ||
+      faculty.includes(q) ||
+      inst.includes(q) ||
+      grade === q ||
+      courses.includes(q)
+    )
+  })
 
   return (
     <div className="space-y-8">
@@ -447,14 +460,23 @@ export default function MarksManager() {
            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
            <input 
             type="text" 
-            placeholder="Search by name or reg number..." 
+            placeholder="Search by name, reg, faculty, or grade..." 
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-sm focus:outline-none focus:border-accent/50 transition-colors"
+            className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-10 text-sm focus:outline-none focus:border-accent/50 transition-colors"
            />
+           {search && (
+             <button 
+               onClick={() => setSearch('')}
+               className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors"
+               title="Clear Search"
+             >
+               <X size={16} />
+             </button>
+           )}
         </div>
         <div className="text-xs text-white/40 font-bold uppercase tracking-widest">
-           Showing {filteredMarks.length} Records
+           Showing {filteredMarks.length} of {marks.length} Records
         </div>
       </div>
 
@@ -519,6 +541,20 @@ export default function MarksManager() {
               </tr>
             ))}
 
+            {!loading && filteredMarks.length === 0 && (
+              <tr>
+                <td colSpan="5" className="p-16 text-center text-white/40">
+                  <p className="text-lg font-bold mb-2">No records found</p>
+                  <p className="text-xs text-white/30 mb-4">No student records match "{search}"</p>
+                  <button 
+                    onClick={() => setSearch('')}
+                    className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold text-accent transition-colors"
+                  >
+                    Clear Search Filter
+                  </button>
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

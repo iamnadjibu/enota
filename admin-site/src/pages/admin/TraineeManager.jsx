@@ -8,7 +8,8 @@ import {
   Building2,
   Calendar,
   ShieldCheck,
-  UserCheck
+  UserCheck,
+  X
 } from 'lucide-react'
 import { collection, query, onSnapshot, orderBy } from 'firebase/firestore'
 import { db } from '../../firebase'
@@ -35,12 +36,16 @@ export default function TraineeManager() {
     return unsubscribe
   }, [])
 
-  const filteredTrainees = trainees.filter(t => 
-    t.firstName?.toLowerCase().includes(search.toLowerCase()) || 
-    t.lastName?.toLowerCase().includes(search.toLowerCase()) ||
-    t.email?.toLowerCase().includes(search.toLowerCase()) ||
-    t.regNumber?.toLowerCase().includes(search.toLowerCase())
-  )
+  const filteredTrainees = trainees.filter(t => {
+    const q = search.trim().toLowerCase()
+    if (!q) return true
+    const fullName = `${t.firstName || ''} ${t.lastName || ''}`.toLowerCase()
+    const email = (t.email || '').toLowerCase()
+    const reg = (t.regNumber || '').toLowerCase()
+    const faculty = (t.faculty || '').toLowerCase()
+    const inst = (t.institution || '').toLowerCase()
+    return fullName.includes(q) || email.includes(q) || reg.includes(q) || faculty.includes(q) || inst.includes(q)
+  })
 
   if (!isMaster) return <div className="p-10 text-center text-white/40">Only Master Admin can access detailed trainee analytics.</div>
 
@@ -67,11 +72,23 @@ export default function TraineeManager() {
            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
            <input 
             type="text" 
-            placeholder="Search trainees by name, email or reg..." 
+            placeholder="Search trainees by name, email, reg, faculty..." 
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-sm focus:outline-none focus:border-accent/50 transition-colors"
+            className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-10 text-sm focus:outline-none focus:border-accent/50 transition-colors"
            />
+           {search && (
+             <button 
+               onClick={() => setSearch('')}
+               className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors"
+               title="Clear Search"
+             >
+               <X size={16} />
+             </button>
+           )}
+        </div>
+        <div className="text-xs text-white/40 font-bold uppercase tracking-widest">
+           Showing {filteredTrainees.length} of {trainees.length} Trainees
         </div>
       </div>
 
@@ -137,7 +154,15 @@ export default function TraineeManager() {
         <div className="text-center py-20 glass rounded-[40px] border border-white/5">
            <Users size={48} className="mx-auto text-white/10 mb-4" />
            <h3 className="text-xl font-bold mb-2">No Trainees Found</h3>
-           <p className="text-white/40 max-w-xs mx-auto">Try adjusting your search or wait for new students to join.</p>
+           <p className="text-white/40 max-w-xs mx-auto mb-4">No student profiles match your search criteria "{search}".</p>
+           {search && (
+             <button 
+               onClick={() => setSearch('')}
+               className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold text-accent transition-colors"
+             >
+               Clear Search
+             </button>
+           )}
         </div>
       )}
     </div>

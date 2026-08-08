@@ -15,7 +15,9 @@ import {
   Dna,
   Link as LinkIcon,
   Eye,
-  Youtube
+  Youtube,
+  Search,
+  X
 } from 'lucide-react'
 import { db } from '../../firebase'
 import { collection, query, onSnapshot, doc, setDoc, deleteDoc, where } from 'firebase/firestore'
@@ -28,6 +30,7 @@ export default function MaterialsManager() {
   const [activeCourse, setActiveCourse] = useState(null)
   const [isEditing, setIsEditing] = useState(false)
   const [universityFaculties, setUniversityFaculties] = useState([])
+  const [search, setSearch] = useState('')
 
 
   // Form State
@@ -355,51 +358,111 @@ export default function MaterialsManager() {
             </button>
           </motion.div>
         ) : (
-          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-8">
-            {courses.map(course => (
-              <motion.div 
-                key={course.id}
-                layoutId={course.id}
-                className="glass p-8 rounded-[40px] border border-white/5 hover:border-accent/20 transition-all flex flex-col group h-full"
-              >
-                <div className="flex items-start justify-between mb-8">
-                   <div className="w-14 h-14 rounded-3xl bg-accent/10 text-accent flex items-center justify-center">
-                     <BookOpen size={28} />
-                   </div>
-                   <div className="flex items-center gap-2">
-                      <button onClick={() => handleEdit(course)} className="p-3 bg-white/5 rounded-2xl hover:bg-white/10"><Edit3 size={16}/></button>
-                      <button onClick={() => handleDeleteSub(course.id)} className="p-3 bg-red-500/5 text-red-500/40 rounded-2xl hover:bg-red-500/10 hover:text-red-500"><Trash2 size={16}/></button>
-                   </div>
-                </div>
-
-                <h3 className="text-xl font-bold mb-3">{course.title}</h3>
-                <p className="text-white/40 text-xs line-clamp-3 mb-8 italic">{course.description}</p>
-
-                <div className="mt-auto pt-8 border-t border-white/5 flex items-center justify-between">
-                   <div className="space-y-1">
-                      <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest leading-none">Modules</p>
-                      <p className="text-sm font-bold">{course.units?.length || 0} Units</p>
-                   </div>
-                    <div className="text-right flex flex-col items-end">
-                       <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest leading-none">Faculties</p>
-                       <div className="flex flex-wrap justify-end gap-1 mt-1">
-                          {(course.faculties || [course.faculty]).map(f => (
-                            <span key={f} className="text-[8px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded truncate max-w-[80px]">{f}</span>
-                          ))}
-                       </div>
-                    </div>
-
-                </div>
-              </motion.div>
-            ))}
-
-            {courses.length === 0 && (
-              <div className="col-span-full py-32 glass rounded-[60px] border-white/5 text-center">
-                 <Layout size={64} className="mx-auto text-white/10 mb-6" />
-                 <h3 className="text-2xl font-bold mb-2">Build Your Curriculum</h3>
-                 <p className="text-white/40 max-w-sm mx-auto">Click "New Course" and start designing your faculty's educational materials.</p>
+          <div className="space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="relative max-w-md w-full">
+                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
+                 <input 
+                  type="text" 
+                  placeholder="Search courses by title, faculty, content..." 
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-10 text-sm focus:outline-none focus:border-accent/50 transition-colors"
+                 />
+                 {search && (
+                   <button 
+                     onClick={() => setSearch('')}
+                     className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors"
+                     title="Clear Search"
+                   >
+                     <X size={16} />
+                   </button>
+                 )}
               </div>
-            )}
+              <div className="text-xs text-white/40 font-bold uppercase tracking-widest">
+                 Showing {courses.filter(course => {
+                   const q = search.trim().toLowerCase()
+                   if (!q) return true
+                   const title = (course.title || '').toLowerCase()
+                   const desc = (course.description || '').toLowerCase()
+                   const faculties = (course.faculties || [course.faculty || '']).join(' ').toLowerCase()
+                   return title.includes(q) || desc.includes(q) || faculties.includes(q)
+                 }).length} of {courses.length} Courses
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-8">
+              {courses.filter(course => {
+                const q = search.trim().toLowerCase()
+                if (!q) return true
+                const title = (course.title || '').toLowerCase()
+                const desc = (course.description || '').toLowerCase()
+                const faculties = (course.faculties || [course.faculty || '']).join(' ').toLowerCase()
+                return title.includes(q) || desc.includes(q) || faculties.includes(q)
+              }).map(course => (
+                <motion.div 
+                  key={course.id}
+                  layoutId={course.id}
+                  className="glass p-8 rounded-[40px] border border-white/5 hover:border-accent/20 transition-all flex flex-col group h-full"
+                >
+                  <div className="flex items-start justify-between mb-8">
+                     <div className="w-14 h-14 rounded-3xl bg-accent/10 text-accent flex items-center justify-center">
+                       <BookOpen size={28} />
+                     </div>
+                     <div className="flex items-center gap-2">
+                        <button onClick={() => handleEdit(course)} className="p-3 bg-white/5 rounded-2xl hover:bg-white/10"><Edit3 size={16}/></button>
+                        <button onClick={() => handleDeleteSub(course.id)} className="p-3 bg-red-500/5 text-red-500/40 rounded-2xl hover:bg-red-500/10 hover:text-red-500"><Trash2 size={16}/></button>
+                     </div>
+                  </div>
+
+                  <h3 className="text-xl font-bold mb-3">{course.title}</h3>
+                  <p className="text-white/40 text-xs line-clamp-3 mb-8 italic">{course.description}</p>
+
+                  <div className="mt-auto pt-8 border-t border-white/5 flex items-center justify-between">
+                     <div className="space-y-1">
+                        <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest leading-none">Modules</p>
+                        <p className="text-sm font-bold">{course.units?.length || 0} Units</p>
+                     </div>
+                      <div className="text-right flex flex-col items-end">
+                         <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest leading-none">Faculties</p>
+                         <div className="flex flex-wrap justify-end gap-1 mt-1">
+                            {(course.faculties || [course.faculty]).map(f => (
+                              <span key={f} className="text-[8px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded truncate max-w-[80px]">{f}</span>
+                            ))}
+                         </div>
+                      </div>
+
+                  </div>
+                </motion.div>
+              ))}
+
+              {courses.length === 0 ? (
+                <div className="col-span-full py-32 glass rounded-[60px] border-white/5 text-center">
+                   <Layout size={64} className="mx-auto text-white/10 mb-6" />
+                   <h3 className="text-2xl font-bold mb-2">Build Your Curriculum</h3>
+                   <p className="text-white/40 max-w-sm mx-auto">Click "New Course" and start designing your faculty's educational materials.</p>
+                </div>
+              ) : courses.filter(course => {
+                const q = search.trim().toLowerCase()
+                if (!q) return true
+                const title = (course.title || '').toLowerCase()
+                const desc = (course.description || '').toLowerCase()
+                const faculties = (course.faculties || [course.faculty || '']).join(' ').toLowerCase()
+                return title.includes(q) || desc.includes(q) || faculties.includes(q)
+              }).length === 0 ? (
+                <div className="col-span-full py-20 glass rounded-[40px] border-white/5 text-center">
+                   <Search size={48} className="mx-auto text-white/10 mb-4" />
+                   <h3 className="text-xl font-bold mb-2">No Matching Courses Found</h3>
+                   <p className="text-white/40 max-w-xs mx-auto mb-4">No course materials match "{search}".</p>
+                   <button 
+                     onClick={() => setSearch('')}
+                     className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold text-accent transition-colors"
+                   >
+                     Clear Search Filter
+                   </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         )}
       </AnimatePresence>

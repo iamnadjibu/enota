@@ -9,7 +9,8 @@ import {
   X,
   School,
   GraduationCap,
-  Layout
+  Layout,
+  Search
 } from 'lucide-react'
 import { db } from '../../firebase'
 import { 
@@ -31,6 +32,7 @@ export default function UniversityManager() {
   const [institutions, setInstitutions] = useState([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('faculties') // 'faculties' | 'institutions'
+  const [search, setSearch] = useState('')
   
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -127,24 +129,46 @@ export default function UniversityManager() {
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-4 border-b border-white/5 pb-1">
-        {[
-          { id: 'faculties', label: 'Faculties', icon: <GraduationCap size={18} /> },
-          { id: 'institutions', label: 'Institutions', icon: <School size={18} /> }
-        ].map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-6 py-4 text-sm font-bold uppercase tracking-widest transition-all relative ${activeTab === tab.id ? 'text-accent' : 'text-white/40 hover:text-white'}`}
-          >
-            {tab.icon}
-            {tab.label}
-            {activeTab === tab.id && (
-              <motion.div layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-1 bg-accent rounded-full" />
-            )}
-          </button>
-        ))}
+      {/* Search & Tabs */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-white/5 pb-4">
+        <div className="flex gap-4">
+          {[
+            { id: 'faculties', label: 'Faculties', icon: <GraduationCap size={18} /> },
+            { id: 'institutions', label: 'Institutions', icon: <School size={18} /> }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-6 py-3 text-sm font-bold uppercase tracking-widest transition-all relative ${activeTab === tab.id ? 'text-accent' : 'text-white/40 hover:text-white'}`}
+            >
+              {tab.icon}
+              {tab.label}
+              {activeTab === tab.id && (
+                <motion.div layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-1 bg-accent rounded-full" />
+              )}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative max-w-sm w-full">
+           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
+           <input 
+            type="text" 
+            placeholder={`Search ${activeTab}...`} 
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-10 text-sm focus:outline-none focus:border-accent/50 transition-colors"
+           />
+           {search && (
+             <button 
+               onClick={() => setSearch('')}
+               className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors"
+               title="Clear Search"
+             >
+               <X size={16} />
+             </button>
+           )}
+        </div>
       </div>
 
       {/* Grid List */}
@@ -152,43 +176,67 @@ export default function UniversityManager() {
         {loading ? (
           <div className="col-span-full py-20 text-center animate-pulse text-white/20 uppercase tracking-[0.3em] font-bold">Loading Settings...</div>
         ) : (
-          (activeTab === 'faculties' ? faculties : institutions).map((item) => (
-            <motion.div 
-              layout
-              key={item.id}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="glass p-6 rounded-[32px] border border-white/5 hover:border-accent/20 transition-all flex items-center justify-between group"
-            >
-              <div className="flex items-center gap-4">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${activeTab === 'faculties' ? 'bg-primary/10 text-primary-light' : 'bg-accent/10 text-accent'}`}>
-                  {activeTab === 'faculties' ? <GraduationCap size={24} /> : <School size={24} />}
+          (() => {
+            const list = activeTab === 'faculties' ? faculties : institutions
+            const q = search.trim().toLowerCase()
+            const filtered = list.filter(item => !q || (item.name || '').toLowerCase().includes(q))
+            
+            if (filtered.length === 0) {
+              return (
+                <div className="col-span-full py-16 glass rounded-[32px] text-center text-white/40 border border-white/5">
+                  <Search size={40} className="mx-auto text-white/10 mb-3" />
+                  <p className="font-bold text-base mb-1">No matches found</p>
+                  <p className="text-xs text-white/30 mb-4">No {activeTab} match "{search}"</p>
+                  {search && (
+                    <button 
+                      onClick={() => setSearch('')}
+                      className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold text-accent transition-colors"
+                    >
+                      Clear Search Filter
+                    </button>
+                  )}
                 </div>
-                <div>
-                  <h3 className="font-bold text-lg">{item.name}</h3>
-                  <p className="text-[10px] text-white/20 uppercase font-bold tracking-widest">
-                    Added {item.createdAt ? (
-                      item.createdAt.toDate ? item.createdAt.toDate().toLocaleDateString() : new Date(item.createdAt).toLocaleDateString()
-                    ) : 'Recently'}
-                  </p>
+              )
+            }
+
+            return filtered.map((item) => (
+              <motion.div 
+                layout
+                key={item.id}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="glass p-6 rounded-[32px] border border-white/5 hover:border-accent/20 transition-all flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${activeTab === 'faculties' ? 'bg-primary/10 text-primary-light' : 'bg-accent/10 text-accent'}`}>
+                    {activeTab === 'faculties' ? <GraduationCap size={24} /> : <School size={24} />}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg">{item.name}</h3>
+                    <p className="text-[10px] text-white/20 uppercase font-bold tracking-widest">
+                      Added {item.createdAt ? (
+                        item.createdAt.toDate ? item.createdAt.toDate().toLocaleDateString() : new Date(item.createdAt).toLocaleDateString()
+                      ) : 'Recently'}
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button 
-                  onClick={() => handleOpenModal(item)}
-                  className="p-2 hover:bg-white/5 rounded-xl text-white/40 hover:text-white transition-colors"
-                >
-                  <Edit2 size={16} />
-                </button>
-                <button 
-                  onClick={() => handleDelete(item.id)}
-                  className="p-2 hover:bg-white/5 rounded-xl text-red-500/40 hover:text-red-500 transition-colors"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            </motion.div>
-          ))
+                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button 
+                    onClick={() => handleOpenModal(item)}
+                    className="p-2 hover:bg-white/5 rounded-xl text-white/40 hover:text-white transition-colors"
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                  <button 
+                    onClick={() => handleDelete(item.id)}
+                    className="p-2 hover:bg-white/5 rounded-xl text-red-500/40 hover:text-red-500 transition-colors"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </motion.div>
+            ))
+          })()
         )}
       </div>
 

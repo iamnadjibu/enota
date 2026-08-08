@@ -12,7 +12,8 @@ import {
   Filter,
   CheckCircle,
   XCircle,
-  ShieldAlert
+  ShieldAlert,
+  X
 } from 'lucide-react'
 import { collection, query, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore'
 import { db } from '../../firebase'
@@ -71,10 +72,14 @@ export default function AdminManager() {
 
   const filteredAdmins = admins.filter(admin => {
     const matchesFilter = admin.status === filter
-    const matchesSearch = 
-      admin.firstName?.toLowerCase().includes(search.toLowerCase()) || 
-      admin.lastName?.toLowerCase().includes(search.toLowerCase()) ||
-      admin.email?.toLowerCase().includes(search.toLowerCase())
+    const q = search.trim().toLowerCase()
+    if (!q) return matchesFilter
+    
+    const fullName = `${admin.firstName || ''} ${admin.lastName || ''}`.toLowerCase()
+    const email = (admin.email || '').toLowerCase()
+    const faculty = (admin.faculty || '').toLowerCase()
+    const inst = (admin.institution || '').toLowerCase()
+    const matchesSearch = fullName.includes(q) || email.includes(q) || faculty.includes(q) || inst.includes(q)
     return matchesFilter && matchesSearch
   })
 
@@ -114,11 +119,20 @@ export default function AdminManager() {
            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
            <input 
             type="text" 
-            placeholder="Search admins..." 
+            placeholder="Search admins by name, email, faculty..." 
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-sm focus:outline-none focus:border-accent/50 transition-colors"
+            className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-10 text-sm focus:outline-none focus:border-accent/50 transition-colors"
            />
+           {search && (
+             <button 
+               onClick={() => setSearch('')}
+               className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors"
+               title="Clear Search"
+             >
+               <X size={16} />
+             </button>
+           )}
         </div>
       </div>
 
@@ -232,9 +246,18 @@ export default function AdminManager() {
             </AnimatePresence>
             {!loading && filteredAdmins.length === 0 && (
               <tr>
-                <td colSpan="4" className="p-20 text-center text-white/20">
-                  <Filter size={48} className="mx-auto mb-4 opacity-50" />
-                  <p>No admins found matching your criteria.</p>
+                <td colSpan="4" className="p-16 text-center text-white/40">
+                  <Filter size={44} className="mx-auto mb-3 text-white/20" />
+                  <p className="text-base font-bold mb-1">No admins found</p>
+                  <p className="text-xs text-white/30 mb-4">No admin accounts match your filter or search query "{search}"</p>
+                  {search && (
+                    <button 
+                      onClick={() => setSearch('')}
+                      className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold text-accent transition-colors"
+                    >
+                      Clear Search
+                    </button>
+                  )}
                 </td>
               </tr>
             )}

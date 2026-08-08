@@ -67,23 +67,57 @@ export default function Marks() {
 
 
   const downloadPDF = async () => {
-    const pdf = new jsPDF('p', 'mm', 'a4')
-    const elements = document.querySelectorAll('.report-card-container')
-    
+    if (!results || results.length === 0) return
     setLoading(true)
-    for (let i = 0; i < elements.length; i++) {
-      const canvas = await html2canvas(elements[i], { scale: 2 })
-      const imgData = canvas.toDataURL('image/png')
-      const pdfWidth = pdf.internal.pageSize.getWidth()
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width
-      
-      if (i > 0) pdf.addPage()
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
-    }
     
-    const name = results[0] ? `${results[0].firstName}_${results[0].lastName}` : 'Marks'
-    pdf.save(`${name}_Full_Report.pdf`)
-    setLoading(false)
+    try {
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const elements = document.querySelectorAll('.report-card-container')
+      
+      for (let i = 0; i < elements.length; i++) {
+        const sourceEl = elements[i]
+        
+        // Clone the element to force desktop A4 layout regardless of device viewport
+        const clone = sourceEl.cloneNode(true)
+        clone.style.position = 'absolute'
+        clone.style.left = '-9999px'
+        clone.style.top = '0px'
+        clone.style.width = '800px'
+        clone.style.background = '#ffffff'
+        clone.style.color = '#000000'
+        clone.style.boxSizing = 'border-box'
+        
+        document.body.appendChild(clone)
+        
+        // Give time for layout rendering and fonts
+        await new Promise((resolve) => setTimeout(resolve, 150))
+        
+        const canvas = await html2canvas(clone, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          width: 800,
+          windowWidth: 1024
+        })
+        
+        document.body.removeChild(clone)
+        
+        const imgData = canvas.toDataURL('image/png')
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width
+        
+        if (i > 0) pdf.addPage()
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
+      }
+      
+      const name = results[0] ? `${results[0].firstName}_${results[0].lastName}` : 'Marks'
+      pdf.save(`${name}_Full_Report.pdf`)
+    } catch (err) {
+      console.error('Error generating PDF:', err)
+      alert('Failed to generate PDF. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
 
@@ -376,9 +410,10 @@ export default function Marks() {
               <div className="flex justify-center pb-20">
                 <button 
                   onClick={downloadPDF}
-                  className="btn-primary flex items-center gap-2 px-12 py-4 shadow-2xl hover:scale-105 active:scale-95 transition-all"
+                  disabled={loading}
+                  className="btn-primary flex items-center gap-2 px-12 py-4 shadow-2xl hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
                 >
-                  <Download size={20} /> Download Combined Report
+                  <Download size={20} /> {loading ? 'Generating PDF...' : 'Download Combined Report'}
                 </button>
               </div>
             </motion.div>
