@@ -5,31 +5,40 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+  checks: write
+
 jobs:
-  build_and_deploy:
+  rules_tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci --prefix tests/firestore-rules
+      - run: npm run test:rules
 
-      - name: Install & Build Admin Site
-        run: |
-          cd admin-site
-          npm install --force
-          npm run build
-
-      - name: Install & Build Public Site
-        run: |
-          cd Public-site
-          npm install --force
-          npm run build
-
-      - name: Merge Dist Folders
-        run: |
-          mkdir -p Public-site/dist/admin
-          cp -r admin-site/dist/* Public-site/dist/admin/
-
-      - name: Deploy to Firebase
-        uses: FirebaseExtended/action-hosting-deploy@v0
+  build_and_deploy:
+    needs: rules_tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            Public-site/package-lock.json
+            admin-site/package-lock.json
+      - run: npm run install:all
+      - run: npm run build
+      - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
           firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_ENOTAPORTAL }}'

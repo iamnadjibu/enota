@@ -1,814 +1,388 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  Users, 
-  Search, 
-  Plus, 
-  Edit2, 
-  Trash2, 
-  Download, 
-  FileSpreadsheet, 
-  AlertCircle,
-  X,
-  Save,
-  CheckCircle,
-  Database
+import {
+  Search, Plus, Edit2, Trash2, Download, FileSpreadsheet, X, Save, Sparkles, FileText, GraduationCap, FileDown,
 } from 'lucide-react'
-import { collection, query, onSnapshot, doc, updateDoc, deleteDoc, addDoc, where, getDocs, writeBatch, orderBy } from 'firebase/firestore'
+import { collection, onSnapshot, doc, updateDoc, deleteDoc, addDoc, query, where } from 'firebase/firestore'
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import { db } from '../../firebase'
 import { useAuth } from '../../context/AuthContext'
+import { useToast, useConfirm } from '@shared/ui/feedback'
+import { TextField, SelectField } from '@shared/ui/forms'
+import { useFaculties, useInstitutions } from '@shared/lib/useCatalog'
+import { expandScope, visibleScope, asList } from '@shared/lib/faculties'
+import { calculateGrade, buildMarkRecord, toScore } from '@shared/lib/grading'
+import { toCSV, downloadCSV } from '@shared/lib/csv'
+import { PageHeader, EmptyState, TableSkeleton, Pagination, usePagination, Modal } from '../../components/ui'
+
+const EMPTY = { firstName: '', lastName: '', regNumber: '', faculty: '', institution: '', gender: 'Male', marks: {} }
+
+const REPORT_COLUMNS = {
+  firstName: 'First name', lastName: 'Last name', regNumber: 'Reg number', faculty: 'Faculty',
+  institution: 'Institution', gender: 'Gender', coursesMarks: 'Course marks', averageMarks: 'Average %', overallGrade: 'Grade',
+}
 
 export default function MarksManager() {
-  const { isMaster, userData } = useAuth()
-  const adminFaculties = Array.isArray(userData?.faculty) ? userData.faculty : [userData?.faculty].filter(Boolean)
+  const { isSuperAdmin, userData } = useAuth()
+  const { faculties } = useFaculties()
+  const institutions = useInstitutions()
+  const toast = useToast()
+  const confirm = useConfirm()
+
   const [marks, setMarks] = useState([])
-  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [isEditing, setIsEditing] = useState(false)
+  const [search, setSearch] = useState('')
+  const [facultyFilter, setFacultyFilter] = useState('All')
+  const [modalOpen, setModalOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [selected, setSelected] = useState(null)
+  const [form, setForm] = useState(EMPTY)
+  const [chosenCourses, setChosenCourses] = useState([])
   const [availableCourses, setAvailableCourses] = useState([])
-  const [selectedCourses, setSelectedCourses] = useState([])
-  const [selectedMark, setSelectedMark] = useState(null)
-  const [isSeeding, setIsSeeding] = useState(false)
-  const [universityFaculties, setUniversityFaculties] = useState([])
-  const [universityInstitutions, setUniversityInstitutions] = useState([])
-
-  // Report Generation State
-  const [isReportModalOpen, setIsReportModalOpen] = useState(false)
+  const [newCourse, setNewCourse] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [busyReg, setBusyReg] = useState(null)
   const [reportColumns, setReportColumns] = useState({
-    firstName: true,
-    lastName: true,
-    regNumber: true,
-    faculty: true,
-    institution: false,
-    gender: false,
-    coursesMarks: true,
-    averageMarks: true,
-    overallGrade: true
+    firstName: true, lastName: true, regNumber: true, faculty: true, institution: false,
+    gender: false, coursesMarks: true, averageMarks: true, overallGrade: true,
   })
 
-  // Form State
-  const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    regNumber: '',
-    faculty: isMaster ? 'MULTIMEDIA PRODUCTION' : (adminFaculties[0] || 'MULTIMEDIA PRODUCTION'),
-    institution: 'NAD CLASS',
-    gender: 'Male',
-    marks: {} // { 'Filmmaking': 85, 'Camera Operation': 90 }
-  })
+  // Faculties/departments this admin may manage.
+  const myScope = useMemo(
+    () => isSuperAdmin ? faculties.map(f => f.name) : visibleScope(faculties, asList(userData?.faculty)),
+    [isSuperAdmin, faculties, userData?.faculty],
+  )
 
+  useEffect(() => onSnapshot(collection(db, 'marks'),
+    snap => { setMarks(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoading(false) },
+    err => { toast.fail(err, 'Could not load marks.'); setLoading(false) },
+  ), []) // eslint-disable-line react-hooks/exhaustive-deps
 
-
+  // Courses for the faculty chosen in the form.
   useEffect(() => {
-    // Fetch Global Config
-    const unsubFaculties = onSnapshot(query(collection(db, 'faculties'), orderBy('name')), (snapshot) => {
-      setUniversityFaculties(snapshot.docs.map(doc => doc.data().name))
-    })
-    const unsubInstitutions = onSnapshot(query(collection(db, 'institutions'), orderBy('name')), (snapshot) => {
-      setUniversityInstitutions(snapshot.docs.map(doc => doc.data().name))
-    })
+    if (!form.faculty) { setAvailableCourses([]); return }
+    return onSnapshot(query(collection(db, 'courses'), where('faculties', 'array-contains', form.faculty)),
+      snap => setAvailableCourses([...new Set(snap.docs.map(d => d.data().title).filter(Boolean))].sort()),
+      () => setAvailableCourses([]))
+  }, [form.faculty])
 
-    const marksRef = collection(db, 'marks')
-    let q = marksRef
-    
-    // If not master, filter by faculty
-    if (!isMaster && adminFaculties.length > 0 && !adminFaculties.includes('N/A')) {
-      q = query(marksRef, where('faculty', 'in', adminFaculties.slice(0, 10)))
-    }
+  const inScope = m => isSuperAdmin || asList(m.faculties || m.faculty).some(f => myScope.includes(f))
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const markList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-      setMarks(markList)
-      setLoading(false)
-    })
-
-    return () => {
-      unsubFaculties()
-      unsubInstitutions()
-      unsubscribe()
-    }
-  }, [isMaster, userData?.faculty])
-
-
-  const calculateGrade = (m) => {
-    if (m === 'N/A' || m === 0 || m === '0' || !m) return 'F'
-    const marks = parseFloat(m)
-    if (marks >= 90) return 'A+'
-    if (marks >= 80) return 'A'
-    if (marks >= 75) return 'B+'
-    if (marks >= 70) return 'B'
-    if (marks >= 65) return 'C+'
-    if (marks >= 60) return 'C'
-    if (marks >= 55) return 'D'
-    if (marks >= 50) return 'E'
-    return 'F'
-  }
-
-  // Fetch Available Courses for Picker
-  useEffect(() => {
-    if (!formData.faculty || formData.faculty === 'N/A') {
-      setAvailableCourses([])
-      return
-    }
-
-    const q = query(collection(db, 'courses'), where('faculties', 'array-contains', formData.faculty))
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const courseList = snapshot.docs.map(doc => doc.data().title)
-      const uniqueCourses = [...new Set(courseList)]
-      setAvailableCourses(uniqueCourses)
-    })
-
-    return unsubscribe
-  }, [formData.faculty])
-
-
-  // Report Generation Logic
-  const handlePrintPDF = () => {
-    window.print() 
-    setIsReportModalOpen(false)
-  }
-
-  const handleExportCSV = () => {
-    const headers = []
-    if (reportColumns.firstName) headers.push('First Name')
-    if (reportColumns.lastName) headers.push('Last Name')
-    if (reportColumns.regNumber) headers.push('Reg Number')
-    if (reportColumns.faculty) headers.push('Faculty')
-    if (reportColumns.institution) headers.push('Institution')
-    if (reportColumns.gender) headers.push('Gender')
-    
-    // Extrapolate dynamic course columns
-    const allCoursesInView = new Set()
-    if (reportColumns.coursesMarks) {
-      filteredMarks.forEach(m => Object.keys(m.marks || {}).forEach(c => allCoursesInView.add(c)))
-      allCoursesInView.forEach(c => headers.push(c))
-    }
-    
-    if (reportColumns.averageMarks) headers.push('Average %')
-    if (reportColumns.overallGrade) headers.push('Grade')
-
-    const rows = filteredMarks.map(mark => {
-      const row = []
-      if (reportColumns.firstName) row.push(`"${mark.firstName || ''}"`)
-      if (reportColumns.lastName) row.push(`"${mark.lastName || ''}"`)
-      if (reportColumns.regNumber) row.push(`"${mark.regNumber || ''}"`)
-      if (reportColumns.faculty) row.push(`"${mark.faculty || ''}"`)
-      if (reportColumns.institution) row.push(`"${mark.institution || ''}"`)
-      if (reportColumns.gender) row.push(`"${mark.gender || ''}"`)
-      
-      if (reportColumns.coursesMarks) {
-        allCoursesInView.forEach(c => row.push(`"${mark.marks?.[c] || '0'}"`))
-      }
-      
-      if (reportColumns.averageMarks) row.push(`"${mark.averageMarks || '0'}"`)
-      if (reportColumns.overallGrade) row.push(`"${mark.overallGrade || 'F'}"`)
-      
-      return row.join(',')
-    })
-
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n')
-    const encodedUri = encodeURI(csvContent)
-    const link = document.createElement("a")
-    link.setAttribute("href", encodedUri)
-    link.setAttribute("download", `eNOTA_Report_${new Date().toISOString().slice(0,10)}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-
-    setIsReportModalOpen(false)
-  }
-
-  const handleSave = async (e) => {
-    e.preventDefault()
-    if (selectedCourses.length === 0) return alert('Please select at least one course')
-    setLoading(true)
-
-    const marksValues = selectedCourses.map(c => parseFloat(formData.marks[c] || 0))
-    const total = marksValues.reduce((a, b) => a + b, 0)
-    const avg = (total / selectedCourses.length).toFixed(2)
-    const overallGrade = calculateGrade(avg)
-    
-    // Include individual grades for legacy compatibility
-    const individualGrades = {}
-    selectedCourses.forEach(c => {
-      individualGrades[`grade${c.replace(/\s+/g, '')}`] = calculateGrade(formData.marks[c])
-    })
-
-    const finalMarks = {}
-    selectedCourses.forEach(c => {
-      finalMarks[c] = formData.marks[c] || 0
-    })
-
-    const finalData = {
-      ...formData,
-      marks: finalMarks,
-      averageMarks: avg,
-      overallGrade,
-      ...individualGrades,
-      updatedAt: new Date().toISOString()
-    }
-
-    try {
-      if (selectedMark) {
-        await updateDoc(doc(db, 'marks', selectedMark.id), finalData)
-      } else {
-        await addDoc(collection(db, 'marks'), { ...finalData, createdAt: new Date().toISOString() })
-      }
-      setIsModalOpen(false)
-      setSelectedMark(null)
-      setSelectedCourses([])
-      setFormData({
-        firstName: '', lastName: '', regNumber: '', faculty: isMaster ? 'MULTIMEDIA PRODUCTION' : (userData?.faculty || ''), 
-        institution: 'NAD CLASS', gender: 'Male',
-        marks: {}
-      })
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-
-  const handleDelete = async (id) => {
-    if (window.confirm('Delete this record?')) {
-      try {
-        await deleteDoc(doc(db, 'marks', id))
-      } catch (err) {
-        console.error(err)
-      }
-    }
-  }
-
-  const seedInitialData = async () => {
-    if (!window.confirm('This will seed the initial student marks, faculties, and courses. Continue?')) return
-    setIsSeeding(true)
-    try {
-      const batch = writeBatch(db)
-
-      // 1. Seed Faculties
-      const facultyList = [
-        'MULTIMEDIA PRODUCTION',
-        'FILMMAKING AND VIDEO PRODUCTION',
-        'PHOTOGRAPHY',
-        'COLOR GRADING',
-        'AI FILMMAKING',
-        'VIBE CODING'
-      ]
-      facultyList.forEach(f => {
-        const docRef = doc(db, 'faculties', f.replace(/\s+/g, '-')) // Stable IDs
-        batch.set(docRef, { name: f, createdAt: new Date().toISOString() })
-      })
-
-      // 2. Seed Institutions
-      const instList = ['NAD CLASS', 'KSP RWANDA', 'NAD PRODUCTION']
-      instList.forEach(i => {
-        const docRef = doc(db, 'institutions', i.replace(/\s+/g, '-'))
-        batch.set(docRef, { name: i, createdAt: new Date().toISOString() })
-      })
-
-      // 3. Seed Courses with respective Faculty assignments
-      const coursesToSeed = [
-        { 
-          title: 'FILMMAKING', 
-          faculties: ['MULTIMEDIA PRODUCTION', 'FILMMAKING AND VIDEO PRODUCTION'],
-          description: 'Master the art of storytelling and cinematic production.'
-        },
-        { 
-          title: 'CAMERA OPERATION', 
-          faculties: ['MULTIMEDIA PRODUCTION', 'FILMMAKING AND VIDEO PRODUCTION', 'PHOTOGRAPHY'],
-          description: 'Technical mastery of professional cinema and photography cameras.'
-        },
-        { 
-          title: 'VIDEO EDITING', 
-          faculties: ['MULTIMEDIA PRODUCTION', 'FILMMAKING AND VIDEO PRODUCTION'],
-          description: 'Post-production excellence using industry software.'
-        }
-      ]
-
-      coursesToSeed.forEach(c => {
-        const docRef = doc(db, 'courses', c.title.replace(/\s+/g, '-'))
-        batch.set(docRef, { 
-          ...c, 
-          faculty: c.faculties[0], // Legacy support
-          units: [], 
-          createdAt: new Date().toISOString() 
-        })
-      })
-
-      // 4. Seed Student Marks
-      const csvData = [
-        ["DORA SHOLAMI","MWAMIKAZI","KSP0103999","N/A",54,"E",73,"B",95,"A+",74.00,"B"],
-        ["MARIE ASSOUMPTA","UWAMAHORO","KSP0103023","N/A",90,"A+",97,"A+",94,"A+",93.67,"A+"],
-        ["LEATITIA","NIYOMUBYEYI","KSP0103942","MULTIMEDIA PRODUCTION",71,"B",93,"A+",60,"C",74.67,"B"],
-        ["REHEMA","IKIREZI","KSP0103929","MULTIMEDIA PRODUCTION",52,"E",78,"B+",71,"B",67.00,"C+"],
-        ["JEAN D'AMOUR","BYIRINGIRO","KSP0103955","MULTIMEDIA PRODUCTION",50,"E",76,"B+",44,"F",56.67,"D"],
-        ["ALBERT","DUSHIMIMANA","KSP0101952","FILMMAKING AND VIDEO PRODUCTION",3,"F",74,"B",46,"F",41.00,"F"],
-        ["JEAN CHRISOSTOME","TUMWESIGE","KSP0101998","FILMMAKING AND VIDEO PRODUCTION",51,"E",74,"B",80,"A",68.33,"C+"],
-        ["ALAIN CRISPIN","HIRWA","KSP0101953","FILMMAKING AND VIDEO PRODUCTION",14,"F",61,"C",62,"C",45.67,"F"],
-        ["MUS'AB","RUGAMBA","KSP01013010","N/A",95,"A+",96,"A+",99,"A+",96.67,"A+"],
-        ["EDMOND","SHEMA","KSP0103918","N/A",60,"C",98,"A+",57,"D",71.67,"B"],
-        ["PASCAL","TUYIZERE","KSP01031003","N/A",71,"B",81,"A",74,"B",75.33,"B+"],
-        ["MICHAEL","KAMANZI","KSP01031011","N/A",61,"C",75,"B+",94,"A+",76.67,"B+"],
-        ["ALIANE","ISIMBI","KSP010301140","N/A",70,"B",73,"B",96,"A+",79.67,"B+"],
-        ["ERIC","MATSIKO","KSP010301234","N/A",27,"F",31,"F",37,"F",31.67,"F"],
-        ["NELLY","MUGWANEZA","KSP010301151","N/A",71,"B",23,"F",92,"A+",62.00,"C"],
-        ["CLEMENTINE","NYIRAHABIMANA","KSP010301257","N/A",65,"C+",0,"F",71,"B",45.33,"F"],
-        ["PATRICK","ITANGISHAKA","KSP010301313","N/A",44,"F",0,"F",67,"C+",37.00,"F"],
-        ["DONAT","SIKWIREBA","KSP010101133","N/A",28,"F",41,"F",71,"B",46.67,"F"],
-        ["CHRISTELLAH","UMURERWA","KSP010301207","N/A",83,"A",70,"B",93,"A+",82.00,"A"],
-        ["JEAN GENTILLE","DUSHIMEYEZU","KSP010301163","N/A",0,"F",74,"B",89,"A",54.33,"E"],
-        ["GAD DAVID","FARADJA","KSP010301167","N/A",80,"A",88,"A",83,"A",83.67,"A"],
-        ["GRACE","UWERA","KSP01031024","N/A",70,"B",96,"A+",98,"A+",88.00,"A"],
-        ["PACIFIQUE","KAYITARE","KSP01031045","N/A",98,"A+",96,"A+",98,"A+",97.33,"A+"],
-        ["JEAN YVES","HARORIMANA","N/A","MULTIMEDIA PRODUCTION",84.17,"A",92,"A+",88.65,"A",88.27,"A"],
-        ["SANO AURORE","ISIMBI","KSP0101898","FILMMAKING AND VIDEO PRODUCTION",76.77,"B+",82.47,"A",86.5,"A",81.91,"A"],
-        ["UWASE SQUELY KESSY","MUSIRUKA","N/A","N/A",77.33,"B+",65,"C+",79,"B+",73.78,"B"],
-        ["CEDRIC","ISHIMWE","N/A","N/A",61.67,"C",37.75,"F",68,"C+",55.81,"D"],
-        ["LOIC","NTIRANDEKURA","N/A","N/A",42.67,"F",57.7,"D",36,"F",45.46,"F"],
-        ["IDRISSA","BAYIZERE","N/A","N/A",43.67,"F",0,"F",68,"C+",37.22,"F"],
-        ["ROSINE","NZAKIZWANIMANA","N/A","N/A",0,"F",0,"F",82,"A",27.33,"F"],
-        ["THEONESTE","SEBERA","N/A","N/A",0,"F",0,"F",82,"A",27.33,"F"],
-        ["KENNY BLAISE","RUGAMBA","N/A","N/A",30.67,"F",43.1,"F",7,"F",26.92,"F"],
-        ["DJAMUHULI","MUKIZA","KSP0103882","MULTIMEDIA PRODUCTION",74.5,"B",81,"A",79.5,"B+",78.33,"B+"],
-        ["ALEX","GASANA","N/A","N/A",0,"F",0,"F",78,"B+",26.00,"F"],
-        ["ANASTASE","NTEZIRYAYO","N/A","N/A",0,"F",0,"F",60,"C",20.00,"F"],
-        ["GAD","TUYISENGE","KSP0101944","FILMMAKING AND VIDEO PRODUCTION",90.5,"A+",99,"A+",91,"A+",93.50,"A+"],
-        ["UZARAMA JEAN CLAUDE","MUVUNYI","KSP0103939","MULTIMEDIA PRODUCTION",0,"F",0,"F",0,"F",0.00,"F"],
-        ["WELLARS","GAKIRE","KSP01019445","FILMMAKING AND VIDEO PRODUCTION",62,"C",85,"A",78.5,"B+",75.17,"B+"],
-        ["SAMUEL","GAKUBA","KSP0103938","MULTIMEDIA PRODUCTION",51,"E",88,"A",48.5,"F",62.50,"C"],
-        ["JEANNE","UWIMBABAZI","KSP0101943","FILMMAKING AND VIDEO PRODUCTION",67,"C+",88,"A",85,"A",80.00,"A"],
-        ["SHEMA ALLIANCE","HABIYAREMYE","KSP 0103919","MULTIMEDIA PRODUCTION",92,"A+",90,"A+",70,"B",84.00,"B+"],
-        ["ARCHANGE","MBABAZI","KSP0101951","FILMMAKING AND VIDEO PRODUCTION",73,"B",66,"C+",66,"C+",68.33,"C+"],
-        ["CHANCELINE","UWIMANA","KSP0103937","MULTIMEDIA PRODUCTION",71,"B",89,"A",88.5,"A",82.83,"A"],
-        ["MUGABO REMY","KWIZERA","KSP0103924","MULTIMEDIA PRODUCTION",71,"B",97,"A+",82.5,"A",83.50,"A"],
-        ["STEVEN","MUHIZI","N/A","FILMMAKING AND VIDEO PRODUCTION",62,"C",0,"F",0,"F",20.67,"F"],
-        ["PATRICK","KAYITARE","N/A","FILMMAKING AND VIDEO PRODUCTION",43,"F",0,"F",0,"F",14.33,"F"],
-        ["JOSELYNE","NIKUZE","N/A","FILMMAKING AND VIDEO PRODUCTION",96,"A+",0,"F",0,"F",32.00,"F"],
-        ["CHARLES","TUYISENGE","KSP0101963","FILMMAKING AND VIDEO PRODUCTION",70,"B",75,"B+",54,"E",66.33,"C+"],
-        ["BRUCE","MANZI","KSP0103960","MULTIMEDIA PRODUCTION",56,"D",80,"A",0,"F",45.33,"F"],
-        ["EMMANUEL","ABAYEZU","KSP0/03974","MULTIMEDIA PRODUCTION",0,"F",72,"B",0,"F",24.00,"F"],
-        ["CHARLES LWANGA","NIYORUGIRA","KSP0103958","MULTIMEDIA PRODUCTION",72,"B",78,"B+",66.5,"C+",72.17,"B"],
-        ["THIERRY","IRADUKUNDA","KSP0101946","MULTIMEDIA PRODUCTION",93,"A+",90,"A+",95.5,"A+",92.83,"A+"],
-        ["JACQUELINE","UWERA","KSP0103957","MULTIMEDIA PRODUCTION",80,"A",93,"A+",50.5,"E",74.50,"B"],
-        ["SIMPLICE","KWIZERA","KSP0103961","MULTIMEDIA PRODUCTION",0,"F",73,"B",82.5,"A",51.83,"E"],
-        ["EMMANUEL","ISHIMWE","KSP0103959","MULTIMEDIA PRODUCTION",74,"B",0,"F",64,"C",46.00,"F"],
-        ["EVIDENCE","MUGISHA","KSP0103925","MULTIMEDIA PRODUCTION",41,"F",81,"A",63,"C",61.67,"C"],
-        ["ALLAN CHRISTOPHER","TABAARA","KSP0101983","FILMMAKING AND VIDEO PRODUCTION",68,"C+",78,"B+",86,"A",77.33,"B+"]
-      ]
-
-      csvData.forEach(row => {
-        const docRef = doc(collection(db, 'marks'))
-        batch.set(docRef, {
-          firstName: row[0],
-          lastName: row[1],
-          regNumber: row[2],
-          faculty: row[3],
-          marks: {
-            'FILMMAKING': row[4],
-            'CAMERA OPERATION': row[6],
-            'VIDEO EDITING': row[8]
-          },
-          averageMarks: row[10],
-          overallGrade: row[11],
-          institution: 'NAD CLASS',
-          gender: 'Male',
-          createdAt: new Date().toISOString()
-        })
-      })
-
-      await batch.commit()
-      alert('Full initial data seeded successfully (Faculties, Institutions, Courses, and Marks)!')
-    } catch (err) {
-      console.error(err)
-      alert('Seeding failed.')
-    } finally {
-      setIsSeeding(false)
-    }
-  }
-
-
-  const filteredMarks = marks.filter(mark => {
+  const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return true
-    const fullName = `${mark.firstName || ''} ${mark.lastName || ''}`.toLowerCase()
-    const reg = (mark.regNumber || '').toLowerCase()
-    const faculty = (mark.faculty || '').toLowerCase()
-    const inst = (mark.institution || '').toLowerCase()
-    const grade = (mark.overallGrade || '').toLowerCase()
-    const courses = Object.keys(mark.marks || {}).join(' ').toLowerCase()
-    return (
-      fullName.includes(q) ||
-      reg.includes(q) ||
-      faculty.includes(q) ||
-      inst.includes(q) ||
-      grade === q ||
-      courses.includes(q)
-    )
-  })
+    return marks
+      .filter(inScope)
+      .filter(m => facultyFilter === 'All' || m.faculty === facultyFilter)
+      .filter(m => {
+        if (!q) return true
+        return [m.firstName, m.lastName, m.regNumber, m.faculty, m.institution, Object.keys(m.marks || {}).join(' ')]
+          .join(' ').toLowerCase().includes(q) || (m.overallGrade || '').toLowerCase() === q
+      })
+      .sort((a, b) => `${a.lastName}${a.firstName}`.localeCompare(`${b.lastName}${b.firstName}`))
+  }, [marks, search, facultyFilter, myScope]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const facultyOptions = useMemo(
+    () => ['All', ...new Set(marks.filter(inScope).map(m => m.faculty).filter(Boolean))].sort((a, b) => a === 'All' ? -1 : a.localeCompare(b)),
+    [marks, myScope], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
+  const pager = usePagination(visible, 20)
+
+  // ---------- add / edit ----------
+  const openNew = () => {
+    setSelected(null)
+    setForm({ ...EMPTY, faculty: myScope[0] || '', institution: institutions[0]?.name || '' })
+    setChosenCourses([])
+    setModalOpen(true)
+  }
+  const openEdit = m => {
+    setSelected(m)
+    setForm({ ...EMPTY, ...m, marks: { ...(m.marks || {}) } })
+    setChosenCourses(Object.keys(m.marks || {}))
+    setModalOpen(true)
+  }
+  const toggleCourse = c => setChosenCourses(cs => cs.includes(c) ? cs.filter(x => x !== c) : [...cs, c])
+  const addCustomCourse = () => {
+    const c = newCourse.trim().toUpperCase()
+    if (!c) return
+    if (!chosenCourses.includes(c)) setChosenCourses(cs => [...cs, c])
+    setNewCourse('')
+  }
+
+  const handleSave = async e => {
+    e.preventDefault()
+    if (!chosenCourses.length) return toast.error('Select at least one course for this trainee.')
+    const bad = chosenCourses.find(c => toScore(form.marks[c]) === null)
+    if (bad) return toast.error(`Enter a score between 0 and 100 for ${bad}.`)
+
+    const reg = form.regNumber.trim().toUpperCase()
+    if (!selected) {
+      const dup = marks.find(m => (m.regNumber || '').toUpperCase() === reg && m.faculty === form.faculty)
+      if (dup) {
+        const edit = await confirm({
+          title: 'Record already exists',
+          message: `${dup.firstName} ${dup.lastName} (${reg}) already has a ${form.faculty} record. Open it instead of creating a duplicate?`,
+          confirmLabel: 'Open existing record', tone: 'info',
+        })
+        if (edit) openEdit(dup)
+        return
+      }
+    }
+
+    setSaving(true)
+    const data = {
+      firstName: form.firstName.trim(), lastName: form.lastName.trim(), regNumber: reg,
+      faculty: form.faculty, faculties: expandScope(faculties, [form.faculty]),
+      institution: form.institution, gender: form.gender,
+      ...buildMarkRecord(form, chosenCourses),
+      updatedAt: new Date().toISOString(),
+    }
+    try {
+      if (selected) await updateDoc(doc(db, 'marks', selected.id), data)
+      else await addDoc(collection(db, 'marks'), { ...data, createdAt: new Date().toISOString() })
+      toast.success(`${selected ? 'Updated' : 'Saved'} ${data.firstName} ${data.lastName}'s ${data.faculty} marks.`)
+      setModalOpen(false)
+    } catch (err) {
+      toast.fail(err, 'The record could not be saved.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async m => {
+    const ok = await confirm({
+      title: `Delete ${m.firstName} ${m.lastName}'s ${m.faculty || ''} record?`,
+      message: `All ${Object.keys(m.marks || {}).length} course marks in this record (${m.regNumber}) will be permanently deleted. This cannot be undone.`,
+      confirmLabel: 'Delete record',
+    })
+    if (!ok) return
+    try { await deleteDoc(doc(db, 'marks', m.id)); toast.success('Record deleted.') }
+    catch (err) { toast.fail(err, 'The record could not be deleted.') }
+  }
+
+  const transcript = async m => {
+    setBusyReg(m.regNumber)
+    try {
+      const all = marks.filter(x => (x.regNumber || '').toUpperCase() === (m.regNumber || '').toUpperCase())
+      await (await import('@shared/lib/transcript')).downloadTranscript(all.length ? all : [m])
+    } catch (err) { toast.fail(err, 'Could not create the transcript.') } finally { setBusyReg(null) }
+  }
+
+  // ---------- reports ----------
+  const reportRows = () => {
+    const courses = new Set()
+    if (reportColumns.coursesMarks) visible.forEach(m => Object.keys(m.marks || {}).forEach(c => courses.add(c)))
+    const headers = []
+    Object.entries(REPORT_COLUMNS).forEach(([k, label]) => {
+      if (!reportColumns[k]) return
+      if (k === 'coursesMarks') headers.push(...courses)
+      else headers.push(label)
+    })
+    const rows = visible.map(m => {
+      const row = {}
+      Object.entries(REPORT_COLUMNS).forEach(([k, label]) => {
+        if (!reportColumns[k]) return
+        if (k === 'coursesMarks') courses.forEach(c => { row[c] = m.marks?.[c] ?? '' })
+        else if (k === 'averageMarks') row[label] = m.averageMarks ?? ''
+        else row[label] = m[k] ?? ''
+      })
+      return row
+    })
+    return { headers, rows }
+  }
+
+  const exportCSV = () => {
+    const { headers, rows } = reportRows()
+    downloadCSV(toCSV(rows, headers), `eNOTA_Marks_${new Date().toISOString().slice(0, 10)}.csv`)
+    toast.success(`Exported ${rows.length} records to CSV.`)
+    setReportOpen(false)
+  }
+
+  const exportPDF = () => {
+    const { headers, rows } = reportRows()
+    const pdf = new jsPDF({ orientation: headers.length > 7 ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' })
+    pdf.setFont('helvetica', 'bold').setFontSize(15).setTextColor(3, 95, 64)
+    pdf.text('eNOTA Portal — Marks report', 14, 16)
+    pdf.setFont('helvetica', 'normal').setFontSize(9).setTextColor(92, 107, 101)
+    pdf.text(`${facultyFilter === 'All' ? 'All faculties' : facultyFilter} · ${rows.length} records · ${new Date().toLocaleDateString('en-GB')}`, 14, 22)
+    autoTable(pdf, {
+      startY: 27, head: [headers], body: rows.map(r => headers.map(h => r[h])),
+      styles: { fontSize: 8, cellPadding: 1.8 }, headStyles: { fillColor: [3, 95, 64] },
+      alternateRowStyles: { fillColor: [245, 250, 247] },
+    })
+    pdf.save(`eNOTA_Marks_${new Date().toISOString().slice(0, 10)}.pdf`)
+    toast.success(`Exported ${rows.length} records to PDF.`)
+    setReportOpen(false)
+  }
+
+  const average = useMemo(() => {
+    const s = chosenCourses.map(c => toScore(form.marks[c])).filter(v => v !== null)
+    return s.length ? s.reduce((a, b) => a + b, 0) / s.length : null
+  }, [chosenCourses, form.marks])
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h1 className="text-3xl font-display font-bold">Marks <span className="text-accent">Manager</span></h1>
-          <p className="text-white/40 text-sm mt-1">Manage and update student records and performance marks.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {isMaster && (
-             <button 
-              onClick={seedInitialData}
-              disabled={isSeeding}
-              className="btn-outline flex items-center gap-2 border-accent/20 text-accent hover:bg-accent/10"
-             >
-               <Database size={16} /> {isSeeding ? 'Seeding...' : 'Seed Data'}
-             </button>
-          )}
-          <button 
-            onClick={() => {
-              setSelectedMark(null)
-              setFormData({
-                firstName: '',
-                lastName: '',
-                regNumber: '',
-                faculty: isMaster ? 'MULTIMEDIA PRODUCTION' : (adminFaculties[0] || 'MULTIMEDIA PRODUCTION'),
-                institution: 'NAD CLASS',
-                gender: 'Male',
-                marks: {}
-              })
-              setSelectedCourses([])
-              setIsModalOpen(true)
-            }}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus size={18} /> Add Student
-          </button>
-          
-          <button 
-            onClick={() => setIsReportModalOpen(true)}
-            className="btn-outline flex items-center gap-2 bg-white/5 hover:bg-white/10"
-          >
-            <FileSpreadsheet size={18} /> Generate Report
-          </button>
+      <PageHeader title="Marks" accent="Manager" subtitle="Add, update and export trainee marks. One record per trainee per faculty.">
+        <Link to="/marks/import" className="btn-outline"><Sparkles size={16} /> Import with AI</Link>
+        <button onClick={() => setReportOpen(true)} className="btn-outline"><FileSpreadsheet size={16} /> Report</button>
+        <button onClick={openNew} className="btn-primary"><Plus size={18} /> Add record</button>
+      </PageHeader>
 
+      <div className="flex flex-col lg:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-subtle" size={18} aria-hidden="true" />
+          <input type="search" aria-label="Search marks" placeholder="Search name, reg number, course or grade"
+            value={search} onChange={e => setSearch(e.target.value)} className="field-input pl-12 pr-10 py-3" />
+          {search && <button onClick={() => setSearch('')} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-subtle hover:text-ink"><X size={16} /></button>}
         </div>
+        <select aria-label="Filter by faculty" value={facultyFilter} onChange={e => setFacultyFilter(e.target.value)} className="field-input lg:max-w-xs py-3">
+          {facultyOptions.map(f => <option key={f} value={f} className="bg-surface">{f === 'All' ? 'All faculties' : f}</option>)}
+        </select>
       </div>
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="relative max-w-md w-full">
-           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
-           <input 
-            type="text" 
-            placeholder="Search by name, reg, faculty, or grade..." 
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-10 text-sm focus:outline-none focus:border-accent/50 transition-colors"
-           />
-           {search && (
-             <button 
-               onClick={() => setSearch('')}
-               className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors"
-               title="Clear Search"
-             >
-               <X size={16} />
-             </button>
-           )}
-        </div>
-        <div className="text-xs text-white/40 font-bold uppercase tracking-widest">
-           Showing {filteredMarks.length} of {marks.length} Records
-        </div>
-      </div>
-
-      <div className="glass rounded-[40px] border border-white/5 overflow-hidden">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-white/5 border-b border-white/5 text-left">
-              <th className="p-6 text-xs font-bold uppercase tracking-widest text-white/40">Student</th>
-              <th className="p-6 text-xs font-bold uppercase tracking-widest text-white/40">Faculty</th>
-              <th className="p-6 text-xs font-bold uppercase tracking-widest text-white/40 text-center">Avg %</th>
-              <th className="p-6 text-xs font-bold uppercase tracking-widest text-white/40 text-center">Grade</th>
-              <th className="p-6 text-xs font-bold uppercase tracking-widest text-white/40 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredMarks.map((mark) => (
-              <tr key={mark.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                <td className="p-6">
-                  <div>
-                    <p className="font-bold">{mark.firstName} {mark.lastName}</p>
-                    <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{mark.regNumber}</p>
-                  </div>
-                </td>
-                <td className="p-6">
-                  <p className="text-xs text-white/60 font-bold uppercase">{mark.faculty}</p>
-                  <p className="text-[10px] text-white/30 truncate max-w-[150px]">
-                    {Object.keys(mark.marks || {}).join(', ')}
-                  </p>
-                </td>
-                <td className="p-6 text-center">
-                  <p className="font-bold text-accent">{mark.averageMarks}%</p>
-                </td>
-                <td className="p-6 text-center">
-                  <span className="px-3 py-1 rounded-lg bg-primary/10 text-primary-light font-bold text-xs">{mark.overallGrade}</span>
-                </td>
-                <td className="p-6">
-                  <div className="flex items-center justify-end gap-2">
-                    <button 
-                      onClick={() => {
-                        setSelectedMark(mark)
-                        const existingMarks = mark.marks || {}
-                        setFormData({
-                          ...mark,
-                          marks: existingMarks
-                        })
-                        setSelectedCourses(Object.keys(existingMarks))
-                        setIsModalOpen(true)
-                      }}
-                      className="p-2 hover:bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors"
-                    >
-                      <Edit2 size={16} />
-                    </button>
-
-                    <button 
-                      onClick={() => handleDelete(mark.id)}
-                      className="p-2 hover:bg-white/5 rounded-lg text-red-500/40 hover:text-red-500 transition-colors"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-
-            {!loading && filteredMarks.length === 0 && (
-              <tr>
-                <td colSpan="5" className="p-16 text-center text-white/40">
-                  <p className="text-lg font-bold mb-2">No records found</p>
-                  <p className="text-xs text-white/30 mb-4">No student records match "{search}"</p>
-                  <button 
-                    onClick={() => setSearch('')}
-                    className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold text-accent transition-colors"
-                  >
-                    Clear Search Filter
-                  </button>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Report Generation Modal */}
-      <AnimatePresence>
-        {isReportModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsReportModalOpen(false)}
-              className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-            ></motion.div>
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-xl glass p-10 rounded-[40px] border border-white/5 shadow-2xl overflow-y-auto max-h-[90vh]"
-            >
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                   <h3 className="text-2xl font-display font-bold text-accent">Custom Report Generator</h3>
-                   <p className="text-xs text-white/40 mt-1">Select columns to include in your export.</p>
-                </div>
-                <button onClick={() => setIsReportModalOpen(false)} className="p-2 hover:bg-white/5 rounded-full text-white/40"><X size={24}/></button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mb-8">
-                {Object.keys(reportColumns).map(key => (
-                  <label key={key} className="flex items-center gap-3 p-3 bg-white/5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors border border-transparent hover:border-white/10">
-                    <input 
-                      type="checkbox" 
-                      className="accent-accent w-4 h-4 cursor-pointer"
-                      checked={reportColumns[key]}
-                      onChange={(e) => setReportColumns({...reportColumns, [key]: e.target.checked})}
-                    />
-                    <span className="text-sm font-bold text-white/80">{key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}</span>
-                  </label>
+      {loading ? <TableSkeleton /> : visible.length === 0 ? (
+        <EmptyState icon={GraduationCap} title={search ? 'No matching records' : 'No marks yet'}
+          text={search ? `Nothing matches “${search}”.` : 'Add a record, or import a marks sheet with AI.'}
+          action={!search && <button onClick={openNew} className="btn-primary"><Plus size={16} /> Add record</button>} />
+      ) : (
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[820px]">
+              <thead>
+                <tr className="bg-white/[0.04] text-left text-sm text-muted">
+                  <th scope="col" className="p-4 pl-6 font-semibold">Trainee</th>
+                  <th scope="col" className="p-4 font-semibold">Faculty &amp; courses</th>
+                  <th scope="col" className="p-4 font-semibold text-center">Average</th>
+                  <th scope="col" className="p-4 font-semibold text-center">Grade</th>
+                  <th scope="col" className="p-4 pr-6 font-semibold text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pager.slice.map((m, i) => (
+                  <motion.tr key={m.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i * 0.03, 0.4) } }}
+                    className="border-t border-white/5 hover:bg-white/[0.02]">
+                    <td className="p-4 pl-6">
+                      <p className="font-semibold">{m.firstName} {m.lastName}</p>
+                      <p className="text-sm text-subtle font-mono">{m.regNumber}</p>
+                    </td>
+                    <td className="p-4">
+                      <p className="text-sm font-medium">{m.faculty}</p>
+                      <p className="text-xs text-subtle truncate max-w-[260px]">{Object.keys(m.marks || {}).join(', ')}</p>
+                    </td>
+                    <td className="p-4 text-center font-bold text-accent">{m.averageMarks}%</td>
+                    <td className="p-4 text-center">
+                      <span className={`px-3 py-1 rounded-lg font-bold text-sm ${m.overallGrade === 'F' ? 'bg-red-500/15 text-red-300' : 'bg-accent/10 text-accent'}`}>{m.overallGrade}</span>
+                    </td>
+                    <td className="p-4 pr-6">
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => transcript(m)} disabled={busyReg === m.regNumber} title="Download transcript" aria-label={`Download transcript for ${m.firstName} ${m.lastName}`}
+                          className="p-2.5 rounded-xl text-muted hover:text-accent hover:bg-accent/10 disabled:opacity-40"><FileDown size={17} /></button>
+                        <button onClick={() => openEdit(m)} title="Edit" aria-label={`Edit ${m.firstName} ${m.lastName}`}
+                          className="p-2.5 rounded-xl text-muted hover:text-ink hover:bg-white/5"><Edit2 size={17} /></button>
+                        {isSuperAdmin && (
+                          <button onClick={() => handleDelete(m)} title="Delete" aria-label={`Delete ${m.firstName} ${m.lastName}'s record`}
+                            className="p-2.5 rounded-xl text-red-300/70 hover:text-red-300 hover:bg-red-500/10"><Trash2 size={17} /></button>
+                        )}
+                      </div>
+                    </td>
+                  </motion.tr>
                 ))}
-              </div>
-
-              <div className="flex items-center gap-4 pt-6 border-t border-white/10">
-                <button 
-                  onClick={handleExportCSV}
-                  className="w-full btn-primary py-4 text-xs tracking-widest font-bold flex items-center justify-center gap-2"
-                >
-                   <Download size={18} /> EXCEL (CSV)
-                </button>
-                <button 
-                  onClick={handlePrintPDF}
-                  className="w-full btn-outline py-4 text-xs tracking-widest font-bold flex items-center justify-center gap-2"
-                >
-                   <FileSpreadsheet size={18} /> PRINT PDF
-                </button>
-              </div>
-            </motion.div>
+              </tbody>
+            </table>
           </div>
-        )}
-      </AnimatePresence>
+          <div className="px-4 pb-4"><Pagination {...pager} label="records" /></div>
+        </div>
+      )}
 
-      {/* Add/Edit Modal */}
-      <AnimatePresence>
-        {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsModalOpen(false)}
-              className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-            ></motion.div>
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-2xl glass p-10 rounded-[40px] border border-white/5 shadow-2xl overflow-y-auto max-h-[90vh]"
-            >
-              <div className="flex items-center justify-between mb-8">
-                <h3 className="text-2xl font-display font-bold">{selectedMark ? 'Edit' : 'Add'} Student Mark</h3>
-                <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-white/5 rounded-full"><X size={24}/></button>
-              </div>
-
-              <form onSubmit={handleSave} className="space-y-6">
-                <div className="grid sm:grid-cols-2 gap-6">
-                   <div className="space-y-2">
-                     <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">First Name</label>
-                     <input 
-                      type="text" required 
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm"
-                      value={formData.firstName} onChange={(e) => setFormData({...formData, firstName: e.target.value})}
-                     />
-                   </div>
-                   <div className="space-y-2">
-                     <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Last Name</label>
-                     <input 
-                      type="text" required 
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm"
-                      value={formData.lastName} onChange={(e) => setFormData({...formData, lastName: e.target.value})}
-                     />
-                   </div>
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-6">
-                   <div className="space-y-2">
-                     <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Reg Number</label>
-                     <input 
-                      type="text" required 
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm"
-                      value={formData.regNumber} onChange={(e) => setFormData({...formData, regNumber: e.target.value.toUpperCase()})}
-                     />
-                   </div>
-                   <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Faculty</label>
-                      {isMaster ? (
-                        <select 
-                         className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm appearance-none"
-                         value={formData.faculty} 
-                         onChange={(e) => {
-                           setFormData({...formData, faculty: e.target.value, marks: {}})
-                           setSelectedCourses([])
-                         }}
-                         >
-                          {universityFaculties.length > 0 ? (
-                            universityFaculties.map(f => (
-                              <option key={f} value={f} className="bg-background">{f}</option>
-                            ))
-                          ) : (
-                            <option value={adminFaculties[0]} className="bg-background">{adminFaculties[0]}</option>
-                          )}
-                          <option value="N/A" className="bg-background">Other/General</option>
-                        </select>
-
-                      ) : adminFaculties.length > 1 ? (
-                        <select 
-                         className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm appearance-none"
-                         value={formData.faculty} 
-                         onChange={(e) => {
-                           setFormData({...formData, faculty: e.target.value, marks: {}})
-                           setSelectedCourses([])
-                         }}
-                         >
-                          {adminFaculties.map(f => (
-                            <option key={f} value={f} className="bg-background">{f}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input 
-                         type="text" disabled 
-                         className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm opacity-50 cursor-not-allowed"
-                         value={formData.faculty}
-                        />
-                      )}
-                   </div>
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Gender</label>
-                      <select 
-                       className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent transition-colors appearance-none text-sm"
-                       value={formData.gender} onChange={(e) => setFormData({...formData, gender: e.target.value})}
-                      >
-                        <option value="Male" className="bg-background">Male</option>
-                        <option value="Female" className="bg-background">Female</option>
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Institution</label>
-                      <select 
-                       className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent appearance-none text-sm transition-colors"
-                       value={formData.institution} onChange={(e) => setFormData({...formData, institution: e.target.value})}
-                      >
-                        {universityInstitutions.length > 0 ? (
-                          universityInstitutions.map(inst => (
-                            <option key={inst} value={inst} className="bg-background">{inst}</option>
-                          ))
-                        ) : (
-                          <option value="NAD CLASS" className="bg-background">NAD CLASS</option>
-                        )}
-                        <option value="Other" className="bg-background">Other</option>
-                      </select>
-                    </div>
-
-                 </div>
-
-                 <div className="pt-6 border-t border-white/5 space-y-8">
-                   <div className="space-y-4">
-                     <h4 className="text-[10px] font-bold text-accent uppercase tracking-[0.2em]">Step 1: Select Courses for this Student</h4>
-                     <div className="flex flex-wrap gap-2">
-                        {availableCourses.length > 0 ? (
-                          availableCourses.map(course => (
-                            <button 
-                              key={course}
-                              type="button"
-                              onClick={() => {
-                                const updated = selectedCourses.includes(course)
-                                  ? selectedCourses.filter(c => c !== course)
-                                  : [...selectedCourses, course]
-                                setSelectedCourses(updated)
-                              }}
-                              className={`text-[10px] font-bold py-2.5 px-4 rounded-xl border transition-all ${selectedCourses.includes(course) ? 'bg-accent text-background border-accent' : 'border-white/10 text-white/40 hover:border-white/20'}`}
-                            >
-                              {course}
-                            </button>
-                          ))
-                        ) : (
-                          <p className="text-white/20 text-[10px] italic">No active courses found for this faculty in the curriculum system.</p>
-                        )}
-                     </div>
-                   </div>
-
-                   {selectedCourses.length > 0 && (
-                     <div className="space-y-6 pt-6 border-t border-white/5">
-                        <h4 className="text-[10px] font-bold text-accent uppercase tracking-[0.2em]">Step 2: Enter Component Marks</h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                          {selectedCourses.map((course) => (
-                            <div key={course} className="space-y-4 bg-white/2 p-6 rounded-3xl border border-white/5 hover:border-accent/10 transition-all">
-                              <div className="flex items-center justify-between">
-                                <label className="text-[10px] font-bold text-white uppercase tracking-widest">{course}</label>
-                                <span className="text-[10px] font-bold text-accent bg-accent/10 px-2 py-0.5 rounded-lg">{calculateGrade(formData.marks[course] || 0)}</span>
-                              </div>
-                              <div className="relative">
-                                <input 
-                                  type="number" min="0" max="100"
-                                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-xl font-bold tracking-tighter"
-                                  value={formData.marks[course] || ''} 
-                                  onChange={(e) => setFormData({
-                                    ...formData, 
-                                    marks: { ...formData.marks, [course]: e.target.value }
-                                  })}
-                                />
-                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-white/10 font-bold">%</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                     </div>
-                   )}
-                </div>
-
-                <button 
-                  type="submit" 
-                  disabled={loading}
-                  className="btn-primary w-full py-4 text-sm font-bold flex items-center justify-center gap-2 mt-8"
-                >
-                  <Save size={18} /> {selectedMark ? 'Update Record' : 'Save New Record'}
-                </button>
-              </form>
-            </motion.div>
+      {/* Report modal */}
+      <Modal open={reportOpen} onClose={() => setReportOpen(false)} title="Export report" subtitle={`${visible.length} records in the current view will be exported.`}>
+        <fieldset>
+          <legend className="field-label">Columns</legend>
+          <div className="grid grid-cols-2 gap-3">
+            {Object.entries(REPORT_COLUMNS).map(([k, label]) => (
+              <label key={k} className="flex items-center gap-3 p-3 bg-white/[0.04] rounded-xl cursor-pointer hover:bg-white/[0.08] border border-white/5">
+                <input type="checkbox" className="accent-accent w-4 h-4" checked={reportColumns[k]}
+                  onChange={e => setReportColumns(c => ({ ...c, [k]: e.target.checked }))} />
+                <span className="text-sm font-medium">{label}</span>
+              </label>
+            ))}
           </div>
-        )}
-      </AnimatePresence>
+        </fieldset>
+        <div className="grid sm:grid-cols-2 gap-3 pt-6 mt-6 border-t border-white/10">
+          <button onClick={exportCSV} className="btn-primary py-3.5"><Download size={18} /> Excel (CSV)</button>
+          <button onClick={exportPDF} className="btn-outline py-3.5"><FileText size={18} /> PDF</button>
+        </div>
+      </Modal>
+
+      {/* Add / edit modal */}
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} wide
+        title={selected ? 'Edit marks record' : 'Add marks record'}
+        subtitle={selected ? `${selected.firstName} ${selected.lastName} · ${selected.faculty}` : 'One record per trainee per faculty. Add another record for each extra faculty.'}>
+        <form onSubmit={handleSave} className="space-y-6">
+          <div className="grid sm:grid-cols-2 gap-5">
+            <TextField label="First name" required value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} />
+            <TextField label="Last name" required value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} />
+            <TextField label="Registration number" required placeholder="KSP0101XXX" inputClassName="uppercase font-mono"
+              value={form.regNumber} onChange={e => setForm({ ...form, regNumber: e.target.value.toUpperCase() })} />
+            <SelectField label="Faculty or department" required
+              options={myScope.length ? myScope : [{ value: '', label: 'No faculties assigned' }]}
+              value={form.faculty} onChange={e => { setForm({ ...form, faculty: e.target.value }); if (!selected) setChosenCourses([]) }} />
+            <SelectField label="Gender" options={['Male', 'Female']} value={form.gender} onChange={e => setForm({ ...form, gender: e.target.value })} />
+            <SelectField label="Institution" options={institutions.length ? institutions.map(i => i.name) : ['NAD CLASS']}
+              value={form.institution} onChange={e => setForm({ ...form, institution: e.target.value })} />
+          </div>
+
+          <div className="pt-6 border-t border-white/10 space-y-4">
+            <h3 className="font-display font-semibold">1. Courses</h3>
+            <div className="flex flex-wrap gap-2">
+              {[...new Set([...availableCourses, ...chosenCourses])].map(c => (
+                <button key={c} type="button" role="checkbox" aria-checked={chosenCourses.includes(c)} onClick={() => toggleCourse(c)}
+                  className={`chip ${chosenCourses.includes(c) ? 'chip-on' : 'chip-off'}`}>{c}</button>
+              ))}
+              {!availableCourses.length && !chosenCourses.length && <p className="text-sm text-subtle">No courses are set up for this faculty yet — add one below.</p>}
+            </div>
+            <div className="flex gap-2">
+              <input aria-label="Add another course" placeholder="Add another course name" value={newCourse}
+                onChange={e => setNewCourse(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomCourse() } }}
+                className="field-input py-2.5" />
+              <button type="button" onClick={addCustomCourse} className="btn-ghost border border-white/10 shrink-0"><Plus size={16} /> Add</button>
+            </div>
+          </div>
+
+          <AnimatePresence>
+            {chosenCourses.length > 0 && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="pt-6 border-t border-white/10 space-y-4 overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-display font-semibold">2. Scores</h3>
+                  {average !== null && <p className="text-sm text-muted">Average <span className="text-accent font-bold">{average.toFixed(2)}%</span> · Grade <span className="text-accent font-bold">{calculateGrade(average)}</span></p>}
+                </div>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {chosenCourses.map(c => (
+                    <div key={c} className="p-4 rounded-2xl border border-white/10 bg-white/[0.03]">
+                      <div className="flex items-center justify-between mb-2">
+                        <label htmlFor={`score-${c}`} className="text-sm font-semibold">{c}</label>
+                        <span className="text-xs font-bold text-accent bg-accent/10 px-2 py-0.5 rounded-lg">{calculateGrade(form.marks[c])}</span>
+                      </div>
+                      <div className="relative">
+                        <input id={`score-${c}`} type="number" min="0" max="100" step="0.01" inputMode="decimal" required
+                          className="field-input text-xl font-bold pr-10" value={form.marks[c] ?? ''}
+                          onChange={e => setForm({ ...form, marks: { ...form.marks, [c]: e.target.value } })} />
+                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-subtle font-bold" aria-hidden="true">%</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <button type="submit" disabled={saving} className="btn-primary w-full py-4">
+            <Save size={18} /> {saving ? 'Saving…' : selected ? 'Update record' : 'Save record'}
+          </button>
+        </form>
+      </Modal>
     </div>
   )
 }

@@ -35,7 +35,7 @@ export default function About() {
               <h2 className="text-2xl font-display font-bold mb-6 text-accent flex items-center gap-3">
                 <Target size={24} /> Our Mission
               </h2>
-              <p className="text-white/60 leading-relaxed">
+              <p className="text-muted leading-relaxed">
                 To empower businesses, brands, and creators through innovative digital solutions and world-class production services. We don't just complete projects; we turn bold concepts into digital realities.
               </p>
             </div>
@@ -43,7 +43,7 @@ export default function About() {
               <h2 className="text-2xl font-display font-bold mb-6 text-accent flex items-center gap-3">
                 <Award size={24} /> Leadership
               </h2>
-              <p className="text-white/60 leading-relaxed">
+              <p className="text-muted leading-relaxed">
                 Under the dynamic leadership of our Managing and General Director, <span className="text-white font-medium">Nadjibullah Uwabato</span>, NAD Production is driven by a relentless commitment to excellence and innovation.
               </p>
             </div>
@@ -63,7 +63,7 @@ export default function About() {
                     <CheckCircle2 size={20} />
                   </div>
                   <h4 className="font-bold mb-2 group-hover:text-accent transition-colors">{service.title}</h4>
-                  <p className="text-xs text-white/40 leading-relaxed">{service.desc}</p>
+                  <p className="text-xs text-muted leading-relaxed">{service.desc}</p>
                 </motion.div>
               ))}
             </div>
@@ -81,7 +81,7 @@ export default function About() {
           >
             A Relentless Commitment to Excellence
           </motion.h2>
-          <p className="text-white/60 max-w-2xl mx-auto mb-12 relative z-10">
+          <p className="text-muted max-w-2xl mx-auto mb-12 relative z-10">
             Our team brings a wealth of passion, technical proficiency, and creative ingenuity to every single project we undertake. Whether you are a startup or an established brand, we are here to elevate you.
           </p>
           <Link to="/materials" className="btn-primary relative z-10 px-12 py-4 inline-block">Explore Our Works</Link>

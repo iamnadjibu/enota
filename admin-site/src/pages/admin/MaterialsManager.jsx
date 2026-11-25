@@ -22,70 +22,46 @@ import {
 import { db } from '../../firebase'
 import { collection, query, onSnapshot, doc, setDoc, deleteDoc, where } from 'firebase/firestore'
 import { useAuth } from '../../context/AuthContext'
+import { useToast, useConfirm } from '@shared/ui/feedback'
+import { ChipSelect } from '@shared/ui/forms'
+import { useFaculties } from '@shared/lib/useCatalog'
+import { chipOptions, expandScope, visibleScope, asList } from '@shared/lib/faculties'
+import { TableSkeleton } from '../../components/ui'
 
 export default function MaterialsManager() {
   const { userData, isMaster } = useAuth()
+  const toast = useToast()
+  const confirm = useConfirm()
+  const { faculties } = useFaculties()
   const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
   const [activeCourse, setActiveCourse] = useState(null)
   const [isEditing, setIsEditing] = useState(false)
-  const [universityFaculties, setUniversityFaculties] = useState([])
   const [search, setSearch] = useState('')
 
+  // Faculties and departments this admin manages.
+  const myScope = React.useMemo(
+    () => isMaster ? faculties.map(f => f.name) : visibleScope(faculties, asList(userData?.faculty)),
+    [isMaster, faculties, userData?.faculty],
+  )
+  const defaultFaculties = () => (isMaster ? [] : asList(userData?.faculty))
 
   // Form State
-  const [formData, setFormData] = useState({
-    title: '',
-    faculties: userData?.faculty ? (Array.isArray(userData.faculty) ? userData.faculty : [userData.faculty]) : ['MULTIMEDIA PRODUCTION'],
-    description: '',
-    units: []
-  })
+  const [formData, setFormData] = useState({ title: '', faculties: defaultFaculties(), description: '', units: [] })
 
   useEffect(() => {
-    const unsubFaculties = onSnapshot(collection(db, 'faculties'), (snapshot) => {
-      const list = snapshot.docs.map(doc => doc.data().name).sort()
-      setUniversityFaculties(list)
-    })
-
-    // Wait for userData if not Master
-    if (!isMaster && !userData?.faculty) return
-
-    let q;
-    if (isMaster) {
-      q = query(collection(db, 'courses'));
-    } else {
-      if (Array.isArray(userData?.faculty)) {
-        if (userData.faculty.length > 0) {
-          q = query(collection(db, 'courses'), where('faculties', 'array-contains-any', userData.faculty));
-        } else {
-          q = query(collection(db, 'courses'), where('faculties', 'array-contains', 'NONE'));
-        }
-      } else {
-        q = query(collection(db, 'courses'), where('faculties', 'array-contains', userData?.faculty));
-      }
-    }
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setCourses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
-      setLoading(false)
-    }, (err) => {
-      console.error(err)
-      setLoading(false)
-    })
-
-    return () => {
-      unsubFaculties()
-      unsubscribe()
-    }
-  }, [isMaster, userData?.faculty])
+    if (!isMaster && !myScope.length) { setLoading(false); return }
+    const q = isMaster
+      ? query(collection(db, 'courses'))
+      : query(collection(db, 'courses'), where('faculties', 'array-contains-any', myScope.slice(0, 30)))
+    return onSnapshot(q,
+      snapshot => { setCourses(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))); setLoading(false) },
+      err => { toast.fail(err, 'Could not load courses.'); setLoading(false) })
+  }, [isMaster, myScope.join('|')]) // eslint-disable-line react-hooks/exhaustive-deps
 
 
   const handleCreateNew = () => {
-    setFormData({
-      title: '',
-      faculties: userData?.faculty ? (Array.isArray(userData.faculty) ? userData.faculty : [userData.faculty]) : ['MULTIMEDIA PRODUCTION'],
-      description: '',
-      units: []
-    })
+    setFormData({ title: '', faculties: defaultFaculties(), description: '', units: [] })
     setActiveCourse(null)
     setIsEditing(true)
   }
@@ -93,7 +69,8 @@ export default function MaterialsManager() {
   const handleEdit = (course) => {
     setFormData({
       ...course,
-      faculties: course.faculties || (course.faculty ? [course.faculty] : [])
+      // Show what the course was tagged with (without the auto-added parents).
+      faculties: asList(course.tags || course.faculties || course.faculty),
     })
     setActiveCourse(course.id)
     setIsEditing(true)
@@ -134,30 +111,36 @@ export default function MaterialsManager() {
   }
 
   const handleSave = async () => {
-    if (!formData.title) return alert('Please enter a course title')
+    if (!formData.title.trim()) return toast.error('Enter a course title.')
+    if (!formData.faculties.length) return toast.error('Choose at least one faculty or department for this course.')
     try {
       const docRef = activeCourse ? doc(db, 'courses', activeCourse) : doc(collection(db, 'courses'))
-      
-      // Support backward compatibility while using the new structure
-      const finalData = { 
-        ...formData, 
-        faculty: formData.faculties[0] || 'N/A' // Legacy primary faculty for older rules/query support
-      }
-      
-      await setDoc(docRef, finalData)
-
+      const tags = formData.faculties
+      const { id: _id, ...rest } = formData
+      await setDoc(docRef, {
+        ...rest,
+        title: formData.title.trim(),
+        tags, // what the admin chose
+        faculties: expandScope(faculties, tags), // + parent faculties, used for access
+        faculty: tags[0] || 'N/A', // legacy field
+        updatedAt: new Date().toISOString(),
+      })
       setIsEditing(false)
-      alert('Course saved successfully!')
+      toast.success(`“${formData.title.trim()}” saved.`)
     } catch (err) {
-      console.error(err)
-      alert('Error saving course')
+      toast.fail(err, 'The course could not be saved. You can only save courses in your own faculties.')
     }
   }
 
-  const handleDeleteSub = async (id) => {
-    if (window.confirm('Are you sure you want to delete this Entire Course?')) {
-      await deleteDoc(doc(db, 'courses', id))
-    }
+  const handleDeleteSub = async (course) => {
+    const ok = await confirm({
+      title: `Delete “${course.title}”?`,
+      message: `The course and all ${course.units?.length || 0} unit(s) of materials will be deleted for every trainee. This cannot be undone.`,
+      confirmLabel: 'Delete course',
+    })
+    if (!ok) return
+    try { await deleteDoc(doc(db, 'courses', course.id)); toast.success('Course deleted.') }
+    catch (err) { toast.fail(err, 'The course could not be deleted.') }
   }
 
   const getDrivePreview = (url) => {
@@ -169,14 +152,14 @@ export default function MaterialsManager() {
     } catch (e) { return null }
   }
 
-  if (loading) return <div className="p-20 text-center animate-pulse">Loading Academy Structure...</div>
+  if (loading) return <TableSkeleton rows={4} />
 
   return (
     <div className="space-y-10">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h1 className="text-3xl font-display font-bold">Materials <span className="text-accent">Manager</span></h1>
-          <p className="text-white/40 text-sm mt-1">Design Courses, Units, and Chapters for your Faculty.</p>
+          <p className="text-muted text-sm mt-1">Design Courses, Units, and Chapters for your Faculty.</p>
         </div>
         {!isEditing && (
           <button onClick={handleCreateNew} className="btn-primary py-3 px-6 flex items-center gap-2">
@@ -197,44 +180,28 @@ export default function MaterialsManager() {
             <div className="glass p-8 rounded-[40px] border border-accent/20 space-y-6">
                <div className="flex items-center justify-between">
                   <h3 className="text-lg font-bold flex items-center gap-2"><BookOpen className="text-accent" /> Base Course Details</h3>
-                  <button onClick={() => setIsEditing(false)} className="text-white/40 hover:text-white transition-colors">Cancel</button>
+                  <button onClick={() => setIsEditing(false)} className="text-muted hover:text-white transition-colors">Cancel</button>
                </div>
                
                <div className="grid md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Course Title (Bold)</label>
+                    <label className="field-label">Course Title (Bold)</label>
                     <input 
                       type="text" 
                       className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-lg font-bold"
                       value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})}
                     />
                   </div>
-                  <div className="space-y-4">
-                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Assigned Faculties (Multiple Allowed)</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {(universityFaculties.length > 0 ? universityFaculties : ['FILMMAKING AND VIDEO PRODUCTION', 'MULTIMEDIA PRODUCTION', 'COLOR GRADING', 'AI FILMMAKING', 'VIBE CODING']).map(f => (
-                        <button 
-                          key={f}
-                          type="button"
-                          disabled={!isMaster && !(Array.isArray(userData?.faculty) ? userData.faculty.includes(f) : userData?.faculty === f)}
-                          onClick={() => {
-                            const updated = formData.faculties.includes(f)
-                              ? formData.faculties.filter(fac => fac !== f)
-                              : [...formData.faculties, f]
-                            setFormData({ ...formData, faculties: updated })
-                          }}
-                          className={`text-[10px] font-bold py-2 px-3 rounded-xl border transition-all ${formData.faculties.includes(f) ? 'bg-accent text-background border-accent' : 'border-white/10 text-white/40'}`}
-                        >
-                          {f}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-
+                  <ChipSelect
+                    label="Faculties or departments"
+                    options={chipOptions(faculties).filter(o => isMaster || myScope.includes(o.value))}
+                    value={formData.faculties}
+                    onChange={v => setFormData({ ...formData, faculties: v })}
+                    hint="Trainees of the chosen faculties/departments see this course. Choosing a department also shows it to its whole faculty."
+                  />
                </div>
                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Course Introduction (Renders Newlines)</label>
+                  <label className="field-label">Course Introduction (Renders Newlines)</label>
                   <textarea 
                     rows="3"
                     className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 focus:outline-none focus:border-accent text-sm"
@@ -247,7 +214,7 @@ export default function MaterialsManager() {
             <div className="space-y-6">
                <div className="flex items-center justify-between">
                   <h3 className="text-xl font-bold">Course <span className="text-accent">Curriculum</span></h3>
-                  <button onClick={handleAddUnit} className="btn-outline py-2 px-4 text-[10px] flex items-center gap-2">
+                  <button onClick={handleAddUnit} className="btn-outline py-2 px-4 text-xs flex items-center gap-2">
                     <Plus size={14} /> Add Unit
                   </button>
                </div>
@@ -296,7 +263,7 @@ export default function MaterialsManager() {
                           ].map(item => (
                             <div key={item.type} className="space-y-4">
                                <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                                  <h4 className="text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 text-white/60">
+                                  <h4 className="text-xs font-bold uppercase tracking-widest flex items-center gap-2 text-muted">
                                     {item.icon} {item.label}
                                   </h4>
                                   <button 
@@ -319,24 +286,24 @@ export default function MaterialsManager() {
                                        />
                                        <textarea 
                                         placeholder="Brief Description..."
-                                        className="w-full bg-transparent border-none text-[10px] text-white/40 focus:outline-none resize-none"
+                                        className="w-full bg-transparent border-none text-xs text-muted focus:outline-none resize-none"
                                         value={c.description} onChange={(e) => handleUpdateContent(uIdx, item.type, cIdx, 'description', e.target.value)}
                                        />
                                        <div className="flex flex-col gap-2">
                                          <div className="flex items-center gap-2 bg-white/5 rounded-lg px-2 py-1.5 focus-within:bg-white/10 transition-colors">
-                                            <LinkIcon size={10} className="text-white/20"/>
+                                            <LinkIcon size={10} className="text-subtle"/>
                                             <input 
                                               placeholder="Direct Drive Link (Handout)..."
-                                              className="w-full bg-transparent border-none text-[9px] focus:outline-none text-accent"
+                                              className="w-full bg-transparent border-none text-xs focus:outline-none text-accent"
                                               value={c.driveLink || ''} onChange={(e) => handleUpdateContent(uIdx, item.type, cIdx, 'driveLink', e.target.value)}
                                             />
                                             {getDrivePreview(c.driveLink) && <Eye size={10} className="text-accent" />}
                                          </div>
                                          <div className="flex items-center gap-2 bg-white/5 rounded-lg px-2 py-1.5 focus-within:bg-white/10 transition-colors">
-                                            <Youtube size={10} className="text-white/20"/>
+                                            <Youtube size={10} className="text-subtle"/>
                                             <input 
                                               placeholder="YouTube Link (Optional)..."
-                                              className="w-full bg-transparent border-none text-[9px] focus:outline-none text-red-400"
+                                              className="w-full bg-transparent border-none text-xs focus:outline-none text-red-400"
                                               value={c.youtubeLink || ''} onChange={(e) => handleUpdateContent(uIdx, item.type, cIdx, 'youtubeLink', e.target.value)}
                                             />
                                             {c.youtubeLink && <Eye size={10} className="text-red-400" />}
@@ -361,7 +328,7 @@ export default function MaterialsManager() {
           <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div className="relative max-w-md w-full">
-                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
+                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-subtle" size={18} />
                  <input 
                   type="text" 
                   placeholder="Search courses by title, faculty, content..." 
@@ -372,14 +339,14 @@ export default function MaterialsManager() {
                  {search && (
                    <button 
                      onClick={() => setSearch('')}
-                     className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors"
+                     className="absolute right-4 top-1/2 -translate-y-1/2 text-muted hover:text-white transition-colors"
                      title="Clear Search"
                    >
                      <X size={16} />
                    </button>
                  )}
               </div>
-              <div className="text-xs text-white/40 font-bold uppercase tracking-widest">
+              <div className="text-xs text-muted font-bold uppercase tracking-widest">
                  Showing {courses.filter(course => {
                    const q = search.trim().toLowerCase()
                    if (!q) return true
@@ -411,23 +378,23 @@ export default function MaterialsManager() {
                      </div>
                      <div className="flex items-center gap-2">
                         <button onClick={() => handleEdit(course)} className="p-3 bg-white/5 rounded-2xl hover:bg-white/10"><Edit3 size={16}/></button>
-                        <button onClick={() => handleDeleteSub(course.id)} className="p-3 bg-red-500/5 text-red-500/40 rounded-2xl hover:bg-red-500/10 hover:text-red-500"><Trash2 size={16}/></button>
+                        <button onClick={() => handleDeleteSub(course)} aria-label={`Delete ${course.title}`} className="p-3 bg-red-500/5 text-red-500/40 rounded-2xl hover:bg-red-500/10 hover:text-red-500"><Trash2 size={16}/></button>
                      </div>
                   </div>
 
                   <h3 className="text-xl font-bold mb-3">{course.title}</h3>
-                  <p className="text-white/40 text-xs line-clamp-3 mb-8 italic">{course.description}</p>
+                  <p className="text-muted text-xs line-clamp-3 mb-8 italic">{course.description}</p>
 
                   <div className="mt-auto pt-8 border-t border-white/5 flex items-center justify-between">
                      <div className="space-y-1">
-                        <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest leading-none">Modules</p>
+                        <p className="text-xs font-bold text-subtle uppercase tracking-widest leading-none">Modules</p>
                         <p className="text-sm font-bold">{course.units?.length || 0} Units</p>
                      </div>
                       <div className="text-right flex flex-col items-end">
-                         <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest leading-none">Faculties</p>
+                         <p className="text-xs font-bold text-subtle uppercase tracking-widest leading-none">Faculties</p>
                          <div className="flex flex-wrap justify-end gap-1 mt-1">
                             {(course.faculties || [course.faculty]).map(f => (
-                              <span key={f} className="text-[8px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded truncate max-w-[80px]">{f}</span>
+                              <span key={f} className="text-xs font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded truncate max-w-[80px]">{f}</span>
                             ))}
                          </div>
                       </div>
@@ -438,9 +405,9 @@ export default function MaterialsManager() {
 
               {courses.length === 0 ? (
                 <div className="col-span-full py-32 glass rounded-[60px] border-white/5 text-center">
-                   <Layout size={64} className="mx-auto text-white/10 mb-6" />
+                   <Layout size={64} className="mx-auto text-subtle mb-6" />
                    <h3 className="text-2xl font-bold mb-2">Build Your Curriculum</h3>
-                   <p className="text-white/40 max-w-sm mx-auto">Click "New Course" and start designing your faculty's educational materials.</p>
+                   <p className="text-muted max-w-sm mx-auto">Click "New Course" and start designing your faculty's educational materials.</p>
                 </div>
               ) : courses.filter(course => {
                 const q = search.trim().toLowerCase()
@@ -451,9 +418,9 @@ export default function MaterialsManager() {
                 return title.includes(q) || desc.includes(q) || faculties.includes(q)
               }).length === 0 ? (
                 <div className="col-span-full py-20 glass rounded-[40px] border-white/5 text-center">
-                   <Search size={48} className="mx-auto text-white/10 mb-4" />
+                   <Search size={48} className="mx-auto text-subtle mb-4" />
                    <h3 className="text-xl font-bold mb-2">No Matching Courses Found</h3>
-                   <p className="text-white/40 max-w-xs mx-auto mb-4">No course materials match "{search}".</p>
+                   <p className="text-muted max-w-xs mx-auto mb-4">No course materials match "{search}".</p>
                    <button 
                      onClick={() => setSearch('')}
                      className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold text-accent transition-colors"

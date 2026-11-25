@@ -1,232 +1,205 @@
 import React, { useState, useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { Menu, X, Instagram, Youtube, Twitter, MessageCircle, Mail, MapPin } from 'lucide-react'
+import { Link, NavLink, useLocation } from 'react-router-dom'
+import { Menu, X, Instagram, Youtube, Twitter, MessageCircle, Mail, MapPin, UserCircle2, LogOut } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useBranding } from '../context/BrandingContext'
 import { doc, onSnapshot } from 'firebase/firestore'
+import { useBranding } from '../context/BrandingContext'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
+import Logo from '@shared/ui/Logo'
 
-export default function PublicLayout({ children }) {
-  const { branding, loading } = useBranding()
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
+const DEFAULT_NAV = [
+  { name: 'Home', path: '/' },
+  { name: 'Materials', path: '/materials' },
+  { name: 'Marks', path: '/marks' },
+  { name: 'About', path: '/about' },
+  { name: 'Contact', path: '/contact' },
+]
+
+// Only internal paths or https links from the admin-managed navigation.
+const safeLink = l => l?.name && typeof l.path === 'string' && (/^\/[\w\-/]*$/.test(l.path) || /^https:\/\//i.test(l.path))
+const titleCase = s => s.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase())
+
+const socialLinks = [
+  { icon: Instagram, label: 'Instagram', url: 'https://www.instagram.com/iamnad_/' },
+  { icon: Youtube, label: 'YouTube', url: 'https://www.youtube.com/@iamnadofficial' },
+  { icon: Twitter, label: 'X (Twitter)', url: 'https://x.com/iamnad250' },
+  { icon: MessageCircle, label: 'WhatsApp', url: 'https://wa.me/250786487234' },
+  { icon: Mail, label: 'Email', url: 'mailto:inkhub250@gmail.com' },
+]
+
+const footerLinks = [
+  { name: 'NAD Class', url: 'https://nadclasses.netlify.app/' },
+  { name: 'NAD Market', url: 'https://nadmarket.netlify.app/' },
+  { name: 'KSP Rwanda', url: 'https://www.ksp.rw/' },
+  { name: 'NAD Projects', url: 'https://nadprojects.netlify.app/' },
+  { name: 'Book NAD', url: 'https://booknadprod.web.app/' },
+  { name: 'Books', url: 'https://nadmarket.netlify.app/' },
+]
+
+export default function PublicLayout({ children, fullBleed = false }) {
+  const { branding } = useBranding()
+  const [open, setOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
+  const [nav, setNav] = useState(DEFAULT_NAV)
   const location = useLocation()
-  const [dynamicNav, setDynamicNav] = useState([])
-  const { currentUser, logout } = useAuth()
+  const { currentUser, userData, logout } = useAuth()
+
+  useEffect(() => onSnapshot(doc(db, 'siteConfig', 'navigation'), snap => {
+    const links = (snap.exists() && snap.data().links || []).filter(safeLink)
+    if (links.length) {
+      const withHome = links.some(l => l.path === '/') ? links : [{ name: 'Home', path: '/' }, ...links]
+      setNav(withHome.map(l => ({ ...l, name: titleCase(l.name) })))
+    }
+  }, () => {}), [])
 
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'siteConfig', 'navigation'), (docSnap) => {
-      if (docSnap.exists() && docSnap.data().links?.length > 0) {
-        setDynamicNav(docSnap.data().links)
-      } else {
-        setDynamicNav([
-          { name: 'HOME', path: '/' },
-          { name: 'MATERIALS', path: '/materials' },
-          { name: 'MARKS', path: '/marks' },
-          { name: 'ABOUT US', path: '/about' },
-          { name: 'CONTACT US', path: '/contact' },
-        ])
-      }
-    })
-    return () => unsub()
+    const onScroll = () => setScrolled(window.scrollY > 12)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  // Ensure HOME is prominently featured if not configured otherwise
-  const navLinks = dynamicNav.find(l => l.path === '/') 
-        ? dynamicNav 
-        : [{ name: 'HOME', path: '/' }, ...dynamicNav]
+  useEffect(() => { setOpen(false); window.scrollTo(0, 0) }, [location.pathname])
 
-  const socialLinks = [
-    { icon: <Instagram size={20} />, url: 'https://www.instagram.com/iamnad_/' },
-    { icon: <Youtube size={20} />, url: 'https://www.youtube.com/@iamnadofficial' },
-    { icon: <Twitter size={20} />, url: 'https://x.com/iamnad250' },
-    { icon: <MessageCircle size={20} />, url: 'https://wa.me/250786487234' },
-    { icon: <Mail size={20} />, url: 'mailto:inkhub250@gmail.com' },
-  ]
+  useEffect(() => {
+    document.body.style.overflow = open ? 'hidden' : ''
+    return () => { document.body.style.overflow = '' }
+  }, [open])
 
-  const footerLinks = [
-    { name: 'NAD CLASS', url: 'https://nadclasses.netlify.app/' },
-    { name: 'NAD MARKET', url: 'https://nadmarket.netlify.app/' },
-    { name: 'KSP RWANDA', url: 'https://www.ksp.rw/' },
-    { name: 'NAD PROJECTS', url: 'https://nadprojects.netlify.app/' },
-    { name: 'BOOK NAD', url: 'https://booknadprod.web.app/' },
-    { name: 'BOOKS', url: 'https://nadmarket.netlify.app/' },
-  ]
+  const firstName = userData?.firstName || currentUser?.displayName?.split(' ')[0] || 'Account'
+
+  const linkClass = ({ isActive }) =>
+    `relative text-[15px] font-semibold transition-colors ${isActive ? 'text-accent' : 'text-ink/80 hover:text-ink'}`
 
   return (
-    <div className="min-h-screen flex flex-col pt-20">
-      {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 glass h-20 flex items-center px-6 lg:px-12 justify-between">
-        <Link to="/" className="flex items-center gap-2 group">
-          <div className="w-10 h-10 rounded-full border-2 border-accent overflow-hidden shadow-lg shadow-accent/20 group-hover:scale-110 transition-transform bg-primary">
-            <img src={branding.logoUrl} alt={branding.portalName} className="w-full h-full object-cover" />
-          </div>
-          <span className="text-2xl font-display font-bold tracking-tighter text-white">{branding.portalName}</span>
-        </Link>
+    <div className={`min-h-screen flex flex-col ${fullBleed ? '' : 'pt-16 sm:pt-20'}`}>
+      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[300] btn-primary">Skip to content</a>
 
-        {/* Desktop Links */}
-        <div className="hidden lg:flex items-center gap-8">
-          {navLinks.map((link) => (
-            link.path.startsWith('http') ? (
-              <a 
-                key={link.name} 
-                href={link.path} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-sm font-bold tracking-widest text-white/80 hover:text-accent transition-colors"
-              >
-                {link.name}
-              </a>
-            ) : (
-              <Link
-                key={link.name}
-                to={link.path}
-                className={`text-sm font-bold tracking-widest hover:text-accent transition-colors ${location.pathname === link.path ? 'text-accent border-b-2 border-accent pb-1' : 'text-white/80'}`}
-              >
-                {link.name}
-              </Link>
-            )
-          ))}
-          {currentUser ? (
-            <div className="flex items-center gap-4">
-              <span className="text-xs font-bold text-accent uppercase tracking-widest">{currentUser.displayName || 'User'}</span>
-              <button onClick={logout} className="btn-outline py-2 text-sm px-6">LOG OUT</button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-4">
-              <Link to="/login" className="text-sm font-bold tracking-widest text-white/80 hover:text-accent transition-colors">LOG IN</Link>
-              <Link to="/register" className="btn-primary py-2 text-sm px-6">JOIN SYSTEM</Link>
-            </div>
-          )}
-        </div>
+      <header className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${scrolled || open ? 'bg-background/80 backdrop-blur-xl border-b border-white/10' : 'bg-transparent border-b border-transparent'}`}>
+        <nav className="max-w-7xl mx-auto h-16 sm:h-20 flex items-center justify-between px-4 sm:px-6 lg:px-12" aria-label="Main">
+          <Link to="/" className="flex items-center shrink-0" aria-label={`${branding.portalName || 'eNOTA Portal'} home`}>
+            <Logo variant="lockup" className="h-7 sm:h-9 w-auto" />
+          </Link>
 
-        {/* Mobile menu toggle */}
-        <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="lg:hidden text-white/80 hover:text-white transition-colors relative z-[60]">
-          {isMenuOpen ? <X size={28} /> : <Menu size={28} />}
-        </button>
-      </nav>
-
-      {/* Mobile Menu */}
-      <AnimatePresence>
-        {isMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0, x: '100%' }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 120 }}
-            className="fixed inset-0 z-40 bg-background/95 backdrop-blur-xl flex flex-col items-center justify-center gap-8 lg:hidden"
-          >
-            {navLinks.map((link) => (
-              link.path.startsWith('http') ? (
-                <a
-                  key={link.name}
-                  href={link.path}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => setIsMenuOpen(false)}
-                  className="text-3xl font-display font-bold text-white hover:text-accent transition-colors"
-                >
-                  {link.name}
-                </a>
-              ) : (
-                <Link
-                  key={link.name}
-                  to={link.path}
-                  onClick={() => setIsMenuOpen(false)}
-                  className={`text-3xl font-display font-bold hover:text-accent transition-colors ${location.pathname === link.path ? 'text-accent' : 'text-white'}`}
-                >
-                  {link.name}
-                </Link>
-              )
+          <ul className="hidden lg:flex items-center gap-8">
+            {nav.map(link => (
+              <li key={link.path + link.name}>
+                {link.path.startsWith('http') ? (
+                  <a href={link.path} target="_blank" rel="noopener noreferrer" className="text-[15px] font-semibold text-ink/80 hover:text-ink">{link.name}</a>
+                ) : (
+                  <NavLink to={link.path} end={link.path === '/'} className={linkClass}>
+                    {({ isActive }) => <>
+                      {link.name}
+                      {isActive && <motion.span layoutId="navUnderline" className="absolute -bottom-2 left-0 right-0 h-0.5 rounded-full bg-accent" />}
+                    </>}
+                  </NavLink>
+                )}
+              </li>
             ))}
+          </ul>
+
+          <div className="hidden lg:flex items-center gap-3">
             {currentUser ? (
-               <div className="flex flex-col items-center gap-4 mt-4">
-                  <span className="text-lg font-bold text-accent uppercase tracking-widest">{currentUser.displayName || 'User'}</span>
-                  <button onClick={() => { logout(); setIsMenuOpen(false); }} className="btn-outline px-12 py-4">LOG OUT</button>
-               </div>
+              <>
+                <Link to="/account" className="flex items-center gap-2 px-4 py-2 rounded-full border border-white/10 hover:border-accent/50 text-sm font-semibold">
+                  <UserCircle2 size={18} className="text-accent" aria-hidden="true" /> {firstName}
+                </Link>
+                <button onClick={logout} className="btn-ghost text-sm" aria-label="Log out"><LogOut size={16} /></button>
+              </>
             ) : (
-               <div className="flex flex-col items-center gap-4 mt-4">
-                  <Link to="/login" onClick={() => setIsMenuOpen(false)} className="text-3xl font-display font-bold text-white hover:text-accent transition-colors">LOG IN</Link>
-                  <Link to="/register" onClick={() => setIsMenuOpen(false)} className="btn-primary px-12 py-4">JOIN SYSTEM</Link>
-               </div>
+              <>
+                <Link to="/login" className="text-[15px] font-semibold text-ink/80 hover:text-ink px-3">Log in</Link>
+                <Link to="/register" className="btn-primary py-2.5 text-sm">Create account</Link>
+              </>
             )}
+          </div>
+
+          <button onClick={() => setOpen(o => !o)} className="lg:hidden p-2 -mr-2 rounded-xl text-ink" aria-label={open ? 'Close menu' : 'Open menu'} aria-expanded={open} aria-controls="mobile-menu">
+            {open ? <X size={26} /> : <Menu size={26} />}
+          </button>
+        </nav>
+      </header>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            id="mobile-menu"
+            initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.25 }}
+            className="fixed inset-x-0 top-16 sm:top-20 bottom-0 z-40 bg-background/95 backdrop-blur-xl lg:hidden overflow-y-auto"
+          >
+            <ul className="px-6 py-8 space-y-1">
+              {nav.map((link, i) => (
+                <motion.li key={link.path + link.name} initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0, transition: { delay: 0.04 * i } }}>
+                  {link.path.startsWith('http') ? (
+                    <a href={link.path} target="_blank" rel="noopener noreferrer" className="block py-3 text-2xl font-display font-bold">{link.name}</a>
+                  ) : (
+                    <NavLink to={link.path} end={link.path === '/'} className={({ isActive }) => `block py-3 text-2xl font-display font-bold ${isActive ? 'text-accent' : 'text-ink'}`}>{link.name}</NavLink>
+                  )}
+                </motion.li>
+              ))}
+            </ul>
+            <div className="px-6 pb-10 pt-4 border-t border-white/10 space-y-3">
+              {currentUser ? (
+                <>
+                  <Link to="/account" className="btn-outline w-full py-3.5"><UserCircle2 size={18} /> My account</Link>
+                  <button onClick={logout} className="btn-ghost w-full py-3.5"><LogOut size={18} /> Log out</button>
+                </>
+              ) : (
+                <>
+                  <Link to="/register" className="btn-primary w-full py-3.5">Create account</Link>
+                  <Link to="/login" className="btn-outline w-full py-3.5">Log in</Link>
+                </>
+              )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <main className="flex-grow">{children}</main>
+      <main id="main" className="flex-grow">{children}</main>
 
-      {/* Footer */}
-      <footer className="bg-surface border-t border-white/5 py-16 px-6 lg:px-12 mt-20">
+      <footer className="bg-surface border-t border-white/5 pt-16 pb-10 px-6 lg:px-12 mt-24">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
-          {/* Brand Info */}
-          <div className="space-y-6 text-center md:text-left flex flex-col items-center md:items-start">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full border border-accent overflow-hidden bg-primary">
-                <img src={branding.logoUrl} alt={branding.portalName} className="w-full h-full object-cover" />
-              </div>
-              <span className="text-xl font-display font-bold tracking-tighter text-white">{branding.portalName}</span>
-            </div>
-            <p className="text-sm text-white/60 leading-relaxed max-w-xs mx-auto md:mx-0">
-              {branding.footerText}
-            </p>
+          <div className="space-y-5">
+            <Logo variant="lockup" className="h-9" />
+            <p className="text-sm text-muted leading-relaxed max-w-xs">{branding.footerText}</p>
           </div>
 
-          {/* Quick Links Group */}
-          <div className="grid grid-cols-2 gap-8 lg:col-span-2">
-            <div className="text-center md:text-left">
-              <h4 className="text-white font-bold mb-6 text-sm uppercase tracking-widest text-accent">Quick Links</h4>
-              <ul className="space-y-4">
-                {footerLinks.slice(0, 3).map((link) => (
-                  <li key={link.name}>
-                    <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-sm text-white/60 hover:text-accent transition-colors">
-                      {link.name}
+          <div className="lg:col-span-2">
+            <h2 className="text-sm font-bold text-accent mb-5">Quick links</h2>
+            <ul className="grid grid-cols-2 gap-x-8 gap-y-3">
+              {footerLinks.map(link => (
+                <li key={link.name}>
+                  <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-sm text-muted hover:text-accent transition-colors">{link.name}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-sm font-bold text-accent mb-5">Follow us</h2>
+              <ul className="flex flex-wrap gap-3">
+                {socialLinks.map(({ icon: Icon, label, url }) => (
+                  <li key={label}>
+                    <a href={url} target="_blank" rel="noopener noreferrer" aria-label={label} title={label}
+                      className="w-11 h-11 rounded-full glass flex items-center justify-center text-muted hover:text-accent hover:bg-white/10 transition-all">
+                      <Icon size={19} aria-hidden="true" />
                     </a>
                   </li>
                 ))}
               </ul>
             </div>
-            <div className="text-center md:text-left">
-              <h4 className="text-white font-bold mb-6 text-sm uppercase tracking-widest text-accent opacity-0 invisible md:visible">_</h4>
-              <ul className="space-y-4">
-                {footerLinks.slice(3).map((link) => (
-                  <li key={link.name}>
-                    <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-sm text-white/60 hover:text-accent transition-colors">
-                      {link.name}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          {/* Socials & Contact */}
-          <div className="space-y-8 flex flex-col items-center md:items-start">
-            <div className="text-center md:text-left">
-              <h4 className="text-white font-bold mb-6 text-sm uppercase tracking-widest text-accent">Socials</h4>
-              <div className="flex flex-wrap justify-center md:justify-start gap-4">
-                {socialLinks.map((link, idx) => (
-                  <a key={idx} href={link.url} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full glass flex items-center justify-center text-white/60 hover:text-accent transition-all hover:bg-white/10">
-                    {link.icon}
-                  </a>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center gap-3 text-sm text-white/60">
-              <MapPin size={16} className="text-accent" />
-              <span>Kigali, Rwanda</span>
-            </div>
+            <p className="flex items-center gap-2 text-sm text-muted"><MapPin size={16} className="text-accent" aria-hidden="true" /> Kigali, Rwanda</p>
           </div>
         </div>
-        
-        <div className="max-w-7xl mx-auto mt-16 pt-8 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-white/40">
-          <p>&copy; {new Date().getFullYear()} {branding.portalName}. All rights reserved.</p>
-          <p className="flex items-center gap-1">
-            Made with <span className="text-accent text-lg">♥</span> by <a href="https://iamnadjibu.com" className="hover:text-accent underline">NAD PRODUCTION</a>
-          </p>
+
+        <div className="max-w-7xl mx-auto mt-14 pt-8 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-3 text-sm text-subtle">
+          <p>&copy; {new Date().getFullYear()} {branding.portalName || 'eNOTA Portal'}. All rights reserved.</p>
+          <p>Made with <span className="text-accent" aria-label="love">♥</span> by <a href="https://iamnadjibu.com" className="hover:text-accent underline underline-offset-2">NAD Production</a></p>
         </div>
       </footer>
     </div>
   )
 }
-

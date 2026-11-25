@@ -1,113 +1,213 @@
 rules_version = '2';
+
+// eNOTA Portal — Firestore Security Rules
+//
+// Roles (stored on /users/{uid}.role):
+//   student     — trainee; registers on the public site, active immediately
+//   admin       — faculty admin; registers on the admin site as "pending"
+//                 and must be approved by a Super Admin
+//   superadmin  — full access; can approve, promote, suspend and blacklist
+//                 ("master" is accepted as a legacy alias)
+//
+// The founding Super Admin is whoever owns /system/superadmin. That document
+// can be created exactly once, by a verified account with the owner email
+// below. After that, only Super Admins can promote other admins.
+//
+// Every privileged action also requires a verified email address and an
+// account that is not on the blacklist.
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // --- HELPERS ---
 
-    function isAuthenticated() {
+    // ---------- helpers ----------
+
+    function signedIn() {
       return request.auth != null;
     }
 
-    function isMaster() {
-      return isAuthenticated() && request.auth.token.email == "nadjibullahu@gmail.com";
+    function verified() {
+      return signedIn() && request.auth.token.email_verified == true;
     }
 
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function hasProfile() {
+      return exists(userPath(request.auth.uid));
+    }
+
+    function me() {
+      return get(userPath(request.auth.uid)).data;
+    }
+
+    function blacklisted() {
+      return exists(/databases/$(database)/documents/blacklist/$(request.auth.uid));
+    }
+
+    // Normalise the legacy "faculty" field (string or list) to a list.
+    function asList(v) {
+      return v is list ? v : (v is string ? [v] : []);
+    }
+
+    function myFaculties() {
+      return asList(me().get('faculty', []));
+    }
+
+    function isFounder() {
+      return verified()
+        && exists(/databases/$(database)/documents/system/superadmin)
+        && get(/databases/$(database)/documents/system/superadmin).data.uid == request.auth.uid;
+    }
+
+    function isSuperAdmin() {
+      return isFounder() || (
+        verified() && !blacklisted() && hasProfile()
+        && me().role in ['superadmin', 'master']
+        && me().status == 'active'
+      );
     }
 
     function isAdmin() {
-      return isAuthenticated() && (
-        isMaster() || (
-          getUserData().role == "admin" &&
-          getUserData().status == "active"
-        )
+      return isSuperAdmin() || (
+        verified() && !blacklisted() && hasProfile()
+        && me().role == 'admin'
+        && me().status == 'active'
       );
     }
 
-    function userHasFaculty(facultyStr) {
-      let userFac = getUserData().faculty;
-      return (userFac is list && facultyStr in userFac) || (userFac == facultyStr);
+    function isActiveStudent() {
+      return verified() && !blacklisted() && hasProfile() && me().status == 'active';
     }
 
-    function isFacultyAdmin(facultyStr) {
-      return isMaster() || (
-        isAdmin() && userHasFaculty(facultyStr)
-      );
+    // Admin may act on data tagged with any of the given faculties.
+    function adminCovers(faculties) {
+      return isSuperAdmin() || (isAdmin() && asList(faculties).hasAny(myFaculties()));
     }
 
-    function userHasAnyFaculty(courseFacultiesList) {
-      let userFac = getUserData().faculty;
-      return (userFac is list && courseFacultiesList.hasAny(userFac)) ||
-             (! (userFac is list) && courseFacultiesList.hasAny([userFac]));
+    // Faculty scope of a marks record (new records carry "faculties").
+    function markScope(data) {
+      return data.get('faculties', asList(data.get('faculty', '')));
     }
 
-    // --- COLLECTIONS ---
+    // ---------- system ----------
 
-    // Users Collection
+    // One-time claim of the founding Super Admin. There is no update rule,
+    // so once created the document can never be taken over.
+    match /system/superadmin {
+      allow get: if signedIn();
+      allow create: if verified()
+        && request.auth.token.email == 'nadjibullahu@gmail.com'
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'claimedAt']);
+      allow delete: if isFounder();
+    }
+
+    // ---------- users ----------
+
     match /users/{userId} {
-      // Admins can see all users, users can see themselves
-      allow read: if isAuthenticated() && (isAdmin() || request.auth.uid == userId);
-      // Anyone can register
-      allow create: if true; 
-      // Users can update their own profile (excluding sensitive fields), Master can update anyone
-      allow update: if isMaster() || (
-        request.auth.uid == userId && 
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status', 'faculty', 'institution', 'regNumber'])
+      // "scope" = the user's faculties plus their parent faculties, so the
+      // admin of a faculty also sees trainees of its departments.
+      allow get: if signedIn() && (
+        request.auth.uid == userId
+        || isSuperAdmin()
+        || (isAdmin() && (
+              asList(resource.data.get('scope', [])).hasAny(myFaculties())
+              || asList(resource.data.get('faculty', [])).hasAny(myFaculties())))
       );
-      // Only Master can delete users
-      allow delete: if isMaster();
+
+      // Super Admins list everyone; faculty admins must filter by their
+      // faculties on "scope" (or on "faculty" for older profiles).
+      allow list: if isSuperAdmin();
+      allow list: if isAdmin() && resource.data.scope.hasAny(myFaculties());
+      allow list: if isAdmin() && resource.data.faculty.hasAny(myFaculties());
+
+      // Self-registration: trainees are active students, admins start pending.
+      // Super Admins may also create profiles (e.g. their own after claiming).
+      allow create: if isSuperAdmin() || signedIn()
+        && request.auth.uid == userId
+        && !blacklisted()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email
+        && (
+          (request.resource.data.role == 'student' && request.resource.data.status == 'active')
+          || (request.resource.data.role == 'admin' && request.resource.data.status == 'pending')
+        );
+
+      // Users may edit their own profile but never their role, status,
+      // faculty, institution, reg number or email. Super Admins may edit anyone.
+      allow update: if isSuperAdmin() || (
+        request.auth.uid == userId
+        && !blacklisted()
+        && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['role', 'status', 'faculty', 'scope', 'institution', 'regNumber', 'email', 'uid'])
+      );
+
+      allow delete: if isSuperAdmin();
     }
 
-    // Marks Collection (Public Access for Searching)
+    // Blacklisted accounts cannot use the portal until a Super Admin revives them.
+    match /blacklist/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    // ---------- marks ----------
+
+    // Public lookup by registration number (parents and third parties can
+    // view transcripts). Queries are capped so the collection cannot be
+    // pulled in one request.
     match /marks/{markId} {
-      // Requirement: Users can search for marks without logging in
-      allow read: if true; 
-      
-      // Admins can add marks for students in their faculty
-      allow create: if isMaster() || isFacultyAdmin(request.resource.data.faculty);
-      // But they cannot edit them, only Superadmin can
-      allow update: if isMaster();
-      allow delete: if isMaster();
+      allow get: if true;
+      allow list: if isAdmin() || (request.query.limit != null && request.query.limit <= 50);
+
+      allow create: if adminCovers(markScope(request.resource.data));
+      allow update: if isSuperAdmin()
+        || (adminCovers(markScope(resource.data)) && adminCovers(markScope(request.resource.data)));
+      allow delete: if isSuperAdmin();
     }
 
-    // Courses/Materials Collection
+    // ---------- courses / materials ----------
+
     match /courses/{courseId} {
-      // Requirement: Access materials in their faculty that they have signed up in (Filtered on UI)
-      // Admins can see all courses
-      // Students must be logged in
-      allow read: if isAuthenticated();
-      
-      // Writes restricted to Master or Faculty Admins
-      // We check if the admin has the legacy primary faculty or any of the faculties in the array
-      allow create: if isMaster() || isFacultyAdmin(request.resource.data.faculty) || (isAdmin() && userHasAnyFaculty(request.resource.data.faculties));
-      allow update: if isMaster() || isFacultyAdmin(resource.data.faculty) || (isAdmin() && userHasAnyFaculty(resource.data.faculties));
-      allow delete: if isMaster() || isFacultyAdmin(resource.data.faculty) || (isAdmin() && userHasAnyFaculty(resource.data.faculties));
+      // Trainees only see courses tagged with one of their faculties or
+      // departments (the app queries with array-contains-any on "faculties").
+      allow read: if isAdmin()
+        || (isActiveStudent() && resource.data.faculties.hasAny(myFaculties()));
+
+      allow create: if adminCovers(request.resource.data.faculties);
+      allow update: if adminCovers(resource.data.faculties)
+        && adminCovers(request.resource.data.faculties);
+      allow delete: if adminCovers(resource.data.faculties);
     }
 
-    // Settings/Branding
+    // ---------- public configuration ----------
+
     match /settings/{settingId} {
       allow read: if true;
-      allow write: if isMaster();
+      allow write: if isSuperAdmin();
     }
 
-    // Site Configurations
     match /siteConfig/{docId} {
       allow read: if true;
-      allow write: if isMaster();
+      allow write: if isSuperAdmin();
     }
-    
-    // Metadata Collections
+
+    // Public homepage statistics, refreshed by a Super Admin from the dashboard.
+    match /stats/{docId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
     match /faculties/{facultyId} {
       allow read: if true;
-      allow write: if isMaster();
+      allow write: if isSuperAdmin();
     }
 
     match /institutions/{instId} {
       allow read: if true;
-      allow write: if isMaster();
+      allow write: if isSuperAdmin();
     }
   }
 }
-
-
