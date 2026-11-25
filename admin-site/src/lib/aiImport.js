@@ -44,7 +44,9 @@ const schema = Schema.object({
 let model
 function getModel() {
   if (!model) {
-    const ai = getAI(app, { backend: new GoogleAIBackend() })
+    // App Check tokens are attached automatically; limited-use tokens add
+    // replay protection for Gemini calls.
+    const ai = getAI(app, { backend: new GoogleAIBackend(), useLimitedUseAppCheckTokens: true })
     model = getGenerativeModel(ai, {
       model: MODEL,
       generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature: 0 },

@@ -32,10 +32,45 @@ site does not work with the new rules, and the new site expects them.
 | Authentication → Settings → Password policy | Require at least 8 characters, letters and numbers | Matches the site's own rule; blocks weak passwords created outside the site |
 | Authentication → Settings → User actions | Turn on **Email enumeration protection** | Stops people discovering which emails have accounts |
 | Authentication → Templates | Set the sender name to “eNOTA Portal” and customise the verification and reset emails | Fewer emails land in spam |
-| App Check | Register the web app with reCAPTCHA Enterprise, then enforce for Firestore and AI Logic | Blocks scripts that are not your website from using your quota |
-| Build → AI Logic | **Get started → Gemini Developer API** | Required for *Import marks (AI)* in the admin site |
 
-## 3. Faculties and departments
+## 3. App Check with reCAPTCHA Enterprise (already in the code)
+
+The site key `6LeBmjEuAAAAAJAoigq-XuCL4KLftR3ZpMxTHnzx` is wired into
+`shared/lib/firebase.js`. Firebase verifies the tokens itself, so no backend
+"assessment" code is needed. To switch it on:
+
+1. Google Cloud console → Security → reCAPTCHA → this key → **Domains**:
+   make sure `enotaportal.web.app` and `enotaportal.firebaseapp.com` are listed
+   (add `localhost` only if you also want real tokens locally).
+2. Firebase console → **App Check** → Apps → the web app → **reCAPTCHA
+   Enterprise** → paste the site key → Save.
+3. For local development, open the site on `localhost`, copy the
+   *App Check debug token* printed in the browser console, and add it in
+   App Check → Apps → ⋮ → **Manage debug tokens**.
+4. Watch **App Check → APIs → metrics** for a few days. When almost all
+   requests show as *verified*, press **Enforce** for Cloud Firestore,
+   Authentication and Firebase AI Logic (in that order is fine).
+   Do not enforce before deploying this version, or the old site breaks.
+
+## 4. Gemini (Import marks with AI)
+
+The admin site calls Gemini through **Firebase AI Logic**. Firebase keeps
+the Gemini API key on Google's side, so **no API key goes in the code, the
+repository or any prompt**.
+
+1. Firebase console → **Build → AI Logic → Get started** → choose
+   **Gemini Developer API** (free tier available). Firebase creates and
+   manages the key for this project.
+2. Optional: in Google AI Studio, check usage and quotas for the
+   `enotaportal` project.
+3. In the admin site open **Import marks (AI)**, upload a sheet and check
+   the preview before saving.
+
+Never paste a Gemini key into the front-end: anyone could copy it from the
+browser. Using your own key would need a server (Cloud Functions with
+Secret Manager, Blaze plan), which this project does not need.
+
+## 5. Faculties and departments
 
 In **Admin → Faculties & departments** a faculty can contain departments
 (e.g. *Multimedia Production* → *Filmmaking and Video Production*,
@@ -45,7 +80,7 @@ department can also be chosen on its own by trainees and admins.
 After moving departments under a faculty, press **Re-sync links** once so
 existing courses, marks and profiles are linked to the new parent faculty.
 
-## 4. Local development
+## 6. Local development
 
 ```bash
 npm run install:all
@@ -58,7 +93,7 @@ cd admin-site  && VITE_USE_EMULATORS=true npx vite
 
 Run the security-rules tests with `npm run test:rules`.
 
-## 5. Build
+## 7. Build
 
 `npm run build` builds the admin site, the public site, and copies the admin
 build into `Public-site/dist/admin` (what Firebase Hosting serves).
