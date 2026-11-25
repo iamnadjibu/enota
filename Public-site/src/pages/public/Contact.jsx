@@ -27,14 +27,14 @@ export default function Contact() {
   }
 
   const handleWhatsApp = () => {
-    const text = `Hello NAD Production, I am ${formData.firstName} ${formData.lastName} (${formData.regNumber}). %0A%0A${formData.message}`
-    window.open(`https://wa.me/250786487234?text=${text}`, '_blank')
+    const text = `Hello NAD Production, I am ${formData.firstName} ${formData.lastName} (${formData.regNumber}).\n\n${formData.message}`
+    window.open(`https://wa.me/250786487234?text=${encodeURIComponent(text)}`, '_blank', 'noopener')
   }
 
   const handleEmail = () => {
     const subject = `eNOTA Inquiry from ${formData.firstName} ${formData.lastName}`
-    const body = `${formData.message}%0A%0AReg Number: ${formData.regNumber}`
-    window.open(`mailto:inkhub250@gmail.com?subject=${subject}&body=${body}`, '_blank')
+    const body = `${formData.message}\n\nReg Number: ${formData.regNumber}`
+    window.location.href = `mailto:inkhub250@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
   }
 
   return (
@@ -86,8 +86,8 @@ export default function Contact() {
             <form onSubmit={handleSubmit} className="space-y-8">
               <div className="grid sm:grid-cols-2 gap-8">
                 <div className="space-y-2">
-                  <label className="text-xs uppercase tracking-widest font-bold text-muted ml-1">First Name</label>
-                  <input 
+                  <label htmlFor="c-first" className="field-label">First name</label>
+                  <input id="c-first" 
                     type="text" 
                     required
                     value={formData.firstName}
@@ -97,8 +97,8 @@ export default function Contact() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs uppercase tracking-widest font-bold text-muted ml-1">Last Name</label>
-                  <input 
+                  <label htmlFor="c-last" className="field-label">Last name</label>
+                  <input id="c-last" 
                     type="text" 
                     required
                     value={formData.lastName}
@@ -111,8 +111,8 @@ export default function Contact() {
 
               <div className="grid sm:grid-cols-2 gap-8">
                 <div className="space-y-2">
-                  <label className="text-xs uppercase tracking-widest font-bold text-muted ml-1">Email</label>
-                  <input 
+                  <label htmlFor="c-email" className="field-label">Email</label>
+                  <input id="c-email" 
                     type="email" 
                     required
                     value={formData.email}
@@ -122,8 +122,8 @@ export default function Contact() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs uppercase tracking-widest font-bold text-muted ml-1">Reg Number</label>
-                  <input 
+                  <label htmlFor="c-reg" className="field-label">Registration number</label>
+                  <input id="c-reg" 
                     type="text" 
                     required
                     value={formData.regNumber}
@@ -135,8 +135,8 @@ export default function Contact() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs uppercase tracking-widest font-bold text-muted ml-1">Message/Comment</label>
-                <textarea 
+                <label htmlFor="c-msg" className="field-label">Message</label>
+                <textarea id="c-msg" 
                   rows="5"
                   required
                   value={formData.message}
