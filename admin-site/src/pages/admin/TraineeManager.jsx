@@ -1,168 +1,188 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { motion } from 'framer-motion'
-import { 
-  Users, 
-  Search, 
-  Mail, 
-  GraduationCap, 
-  Building2,
-  Calendar,
-  ShieldCheck,
-  UserCheck,
-  X
-} from 'lucide-react'
-import { collection, query, onSnapshot, orderBy } from 'firebase/firestore'
+import { Search, X, Users, Trash2, RotateCcw, Ban, Mail, Download } from 'lucide-react'
 import { db } from '../../firebase'
 import { useAuth } from '../../context/AuthContext'
+import { useToast, useConfirm } from '@shared/ui/feedback'
+import { asList } from '@shared/lib/faculties'
+import { toCSV, downloadCSV } from '@shared/lib/csv'
+import { removeAccount, reviveAccount, fullName } from '../../lib/accounts'
+import { PageHeader, EmptyState, TableSkeleton, Pagination, usePagination } from '../../components/ui'
 
 export default function TraineeManager() {
-  const { isMaster } = useAuth()
+  const { isSuperAdmin, userData, currentUser } = useAuth()
+  const toast = useToast()
+  const confirm = useConfirm()
   const [trainees, setTrainees] = useState([])
+  const [removed, setRemoved] = useState([])
+  const [showRemoved, setShowRemoved] = useState(false)
   const [search, setSearch] = useState('')
+  const [facultyFilter, setFacultyFilter] = useState('All')
   const [loading, setLoading] = useState(true)
 
+  // Faculty admins query by their own faculties; "scope" also covers
+  // trainees registered under one of those faculties' departments.
+  const myFaculties = useMemo(() => asList(userData?.faculty).slice(0, 30), [userData?.faculty])
+
   useEffect(() => {
-    const usersRef = collection(db, 'users')
-    const q = query(usersRef, orderBy('createdAt', 'desc'))
+    const accept = docs => docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.role === 'student')
+    const sort = list => list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const userList = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(user => user.role === 'student')
-      setTrainees(userList)
+    if (isSuperAdmin) {
+      return onSnapshot(query(collection(db, 'users'), where('role', '==', 'student')),
+        snap => { setTrainees(sort(accept(snap.docs))); setLoading(false) },
+        err => { toast.fail(err, 'Could not load trainees.'); setLoading(false) })
+    }
+    if (!myFaculties.length) { setLoading(false); return }
+
+    const parts = { scope: [], faculty: [] }
+    const merge = () => {
+      const byId = new Map()
+      ;[...parts.scope, ...parts.faculty].forEach(u => byId.set(u.id, u))
+      setTrainees(sort([...byId.values()]))
       setLoading(false)
-    })
+    }
+    const subs = ['scope', 'faculty'].map(field => onSnapshot(
+      query(collection(db, 'users'), where(field, 'array-contains-any', myFaculties)),
+      snap => { parts[field] = accept(snap.docs); merge() },
+      err => { toast.fail(err, 'Could not load trainees.'); setLoading(false) },
+    ))
+    return () => subs.forEach(u => u())
+  }, [isSuperAdmin, myFaculties.join('|')]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    return unsubscribe
-  }, [])
+  useEffect(() => {
+    if (!isSuperAdmin) return
+    return onSnapshot(query(collection(db, 'blacklist'), where('role', '==', 'student')),
+      snap => setRemoved(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {})
+  }, [isSuperAdmin])
 
-  const filteredTrainees = trainees.filter(t => {
+  const facultyOptions = useMemo(() => {
+    const set = new Set()
+    trainees.forEach(t => asList(t.faculty).forEach(f => set.add(f)))
+    return ['All', ...[...set].sort()]
+  }, [trainees])
+
+  const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return true
-    const fullName = `${t.firstName || ''} ${t.lastName || ''}`.toLowerCase()
-    const email = (t.email || '').toLowerCase()
-    const reg = (t.regNumber || '').toLowerCase()
-    const faculty = (t.faculty || '').toLowerCase()
-    const inst = (t.institution || '').toLowerCase()
-    return fullName.includes(q) || email.includes(q) || reg.includes(q) || faculty.includes(q) || inst.includes(q)
-  })
+    const list = showRemoved ? removed.map(r => ({ ...(r.profile || {}), ...r, id: r.uid, _entry: r })) : trainees
+    return list.filter(t => {
+      if (facultyFilter !== 'All' && !asList(t.faculty).includes(facultyFilter)) return false
+      if (!q) return true
+      return [fullName(t), t.email, t.regNumber, asList(t.faculty).join(' '), t.institution]
+        .join(' ').toLowerCase().includes(q)
+    })
+  }, [trainees, removed, showRemoved, search, facultyFilter])
 
-  if (!isMaster) return <div className="p-10 text-center text-white/40">Only Master Admin can access detailed trainee analytics.</div>
+  const pager = usePagination(filtered, 25)
+
+  const remove = async t => {
+    const ok = await confirm({
+      title: `Remove ${fullName(t)}?`,
+      message: <>Their profile is deleted and the account is <strong>blacklisted</strong>: they can't sign in again unless you revive them. Their marks records are kept.</>,
+      confirmLabel: 'Remove and blacklist',
+    })
+    if (!ok) return
+    try { await removeAccount(t, currentUser.email); toast.success(`${fullName(t)} was removed.`) }
+    catch (err) { toast.fail(err, 'Could not remove this trainee.') }
+  }
+  const revive = async t => {
+    try { await reviveAccount(t._entry); toast.success(`${fullName(t)} has been revived.`) }
+    catch (err) { toast.fail(err, 'Could not revive this trainee.') }
+  }
+
+  const exportCsv = () => {
+    const rows = filtered.map(t => ({
+      'First name': t.firstName, 'Last name': t.lastName, 'Reg number': t.regNumber, Email: t.email,
+      Gender: t.gender, Faculties: asList(t.faculty).join('; '), Institution: t.institution, Joined: (t.createdAt || '').slice(0, 10),
+    }))
+    downloadCSV(toCSV(rows), `eNOTA_Trainees_${new Date().toISOString().slice(0, 10)}.csv`)
+    toast.success(`Exported ${rows.length} trainees.`)
+  }
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h1 className="text-3xl font-display font-bold">Trainee <span className="text-accent">Manager</span></h1>
-          <p className="text-white/40 text-sm mt-1">View and manage all students who have joined the eNOTA system.</p>
-        </div>
-        <div className="flex items-center gap-4 bg-white/5 border border-white/10 rounded-2xl p-4">
-           <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center text-accent">
-              <UserCheck size={20} />
-           </div>
-           <div>
-              <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Total Joined</p>
-              <p className="text-xl font-bold">{trainees.length}</p>
-           </div>
-        </div>
-      </div>
+      <PageHeader title="Trainee" accent="Manager"
+        subtitle={isSuperAdmin ? 'Every trainee registered on eNOTA Portal.' : 'Trainees in your faculties and departments.'}>
+        <button onClick={exportCsv} disabled={!filtered.length} className="btn-outline"><Download size={16} /> Export CSV</button>
+      </PageHeader>
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="relative max-w-md w-full">
-           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
-           <input 
-            type="text" 
-            placeholder="Search trainees by name, email, reg, faculty..." 
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-10 text-sm focus:outline-none focus:border-accent/50 transition-colors"
-           />
-           {search && (
-             <button 
-               onClick={() => setSearch('')}
-               className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors"
-               title="Clear Search"
-             >
-               <X size={16} />
-             </button>
-           )}
-        </div>
-        <div className="text-xs text-white/40 font-bold uppercase tracking-widest">
-           Showing {filteredTrainees.length} of {trainees.length} Trainees
-        </div>
-      </div>
-
-      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {filteredTrainees.map((trainee) => (
-          <motion.div 
-            key={trainee.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="glass p-6 rounded-[32px] border border-white/5 hover:border-accent/20 transition-all group"
-          >
-            <div className="flex items-start justify-between mb-6">
-               <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-white/40 group-hover:bg-accent/10 group-hover:text-accent transition-colors">
-                  <Users size={24} />
-               </div>
-               {trainee.role === 'admin' ? (
-                 <span className="px-2 py-1 rounded-md bg-secondary/10 text-secondary text-[10px] font-bold uppercase tracking-widest flex items-center gap-1">
-                   <ShieldCheck size={10} /> Faculty
-                 </span>
-               ) : (
-                 <span className="px-2 py-1 rounded-md bg-accent/10 text-accent text-[10px] font-bold uppercase tracking-widest">Trainee</span>
-               )}
-            </div>
-
-            <div className="space-y-4">
-               <div>
-                  <h3 className="text-lg font-bold">{trainee.firstName} {trainee.lastName}</h3>
-                  <p className="text-xs text-white/40 flex items-center gap-2 mt-1">
-                    <Mail size={12} /> {trainee.email}
-                  </p>
-               </div>
-
-               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
-                  <div className="space-y-1">
-                     <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest flex items-center gap-1">
-                        <GraduationCap size={10} /> Faculty
-                     </p>
-                     <p className="text-xs font-medium truncate">{trainee.faculty || 'N/A'}</p>
-                  </div>
-                  <div className="space-y-1">
-                     <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest flex items-center gap-1">
-                        <Building2 size={10} /> Institution
-                     </p>
-                     <p className="text-xs font-medium truncate">{trainee.institution || 'eNOTA'}</p>
-                  </div>
-               </div>
-
-               <div className="flex items-center justify-between pt-4">
-                  <div className="flex items-center gap-2 text-[10px] font-bold text-white/20 uppercase tracking-widest">
-                     <Calendar size={12} />
-                     Joined {trainee.createdAt ? new Date(trainee.createdAt).toLocaleDateString() : 'Recently'}
-                  </div>
-                  <div className="text-[10px] font-bold text-accent uppercase tracking-widest">
-                    {trainee.regNumber || 'PROVISIONAL'}
-                  </div>
-               </div>
-            </div>
+      <div className="grid sm:grid-cols-3 gap-4">
+        {[
+          { label: 'Trainees', value: trainees.length },
+          { label: 'Faculties represented', value: facultyOptions.length - 1 },
+          { label: 'Joined in the last 30 days', value: trainees.filter(t => t.createdAt && Date.now() - new Date(t.createdAt) < 30 * 864e5).length },
+        ].map((s, i) => (
+          <motion.div key={s.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0, transition: { delay: i * 0.08 } }} className="card p-5">
+            <p className="text-sm text-muted">{s.label}</p>
+            <p className="text-3xl font-display font-bold mt-1">{loading ? '—' : s.value}</p>
           </motion.div>
         ))}
       </div>
 
-      {filteredTrainees.length === 0 && (
-        <div className="text-center py-20 glass rounded-[40px] border border-white/5">
-           <Users size={48} className="mx-auto text-white/10 mb-4" />
-           <h3 className="text-xl font-bold mb-2">No Trainees Found</h3>
-           <p className="text-white/40 max-w-xs mx-auto mb-4">No student profiles match your search criteria "{search}".</p>
-           {search && (
-             <button 
-               onClick={() => setSearch('')}
-               className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold text-accent transition-colors"
-             >
-               Clear Search
-             </button>
-           )}
+      <div className="flex flex-col lg:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-subtle" size={18} aria-hidden="true" />
+          <input type="search" aria-label="Search trainees" placeholder="Search name, email, reg number or faculty"
+            value={search} onChange={e => setSearch(e.target.value)} className="field-input pl-12 pr-10 py-3" />
+          {search && <button onClick={() => setSearch('')} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-subtle hover:text-ink"><X size={16} /></button>}
+        </div>
+        <select aria-label="Filter by faculty" value={facultyFilter} onChange={e => setFacultyFilter(e.target.value)} className="field-input lg:max-w-xs py-3">
+          {facultyOptions.map(f => <option key={f} value={f} className="bg-surface">{f === 'All' ? 'All faculties' : f}</option>)}
+        </select>
+        {isSuperAdmin && (
+          <button onClick={() => setShowRemoved(s => !s)} aria-pressed={showRemoved}
+            className={`btn-ghost border ${showRemoved ? 'border-red-400/40 text-red-200' : 'border-white/10'}`}>
+            <Ban size={16} /> Removed ({removed.length})
+          </button>
+        )}
+      </div>
+
+      {loading ? <TableSkeleton /> : filtered.length === 0 ? (
+        <EmptyState icon={Users} title={search ? 'No matches' : showRemoved ? 'No removed trainees' : 'No trainees yet'}
+          text={search ? `Nobody matches “${search}”.` : 'Trainees appear here after they register on the public site.'} />
+      ) : (
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[820px]">
+              <thead>
+                <tr className="bg-white/[0.04] text-left text-sm text-muted">
+                  <th scope="col" className="p-4 pl-6 font-semibold">Trainee</th>
+                  <th scope="col" className="p-4 font-semibold">Reg number</th>
+                  <th scope="col" className="p-4 font-semibold">Faculties</th>
+                  <th scope="col" className="p-4 font-semibold">Joined</th>
+                  {isSuperAdmin && <th scope="col" className="p-4 pr-6 font-semibold text-right">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {pager.slice.map((t, i) => (
+                  <motion.tr key={t.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i * 0.03, 0.4) } }}
+                    className="border-t border-white/5 hover:bg-white/[0.02]">
+                    <td className="p-4 pl-6">
+                      <p className="font-semibold">{fullName(t)}</p>
+                      <a href={`mailto:${t.email}`} className="text-sm text-subtle hover:text-accent inline-flex items-center gap-1"><Mail size={12} />{t.email}</a>
+                    </td>
+                    <td className="p-4 font-mono text-sm">{t.regNumber || '—'}</td>
+                    <td className="p-4 text-sm">
+                      <div className="flex flex-wrap gap-1.5">
+                        {asList(t.faculty).map(f => <span key={f} className="px-2 py-0.5 rounded-full bg-accent/10 text-accent text-xs">{f}</span>)}
+                      </div>
+                      <p className="text-subtle text-xs mt-1">{t.institution}</p>
+                    </td>
+                    <td className="p-4 text-sm text-muted">{(showRemoved ? t._entry?.removedAt : t.createdAt)?.slice(0, 10) || '—'}</td>
+                    {isSuperAdmin && (
+                      <td className="p-4 pr-6 text-right">
+                        {showRemoved
+                          ? <button onClick={() => revive(t)} className="p-2.5 rounded-xl bg-accent/10 text-accent hover:bg-accent hover:text-background" aria-label={`Revive ${fullName(t)}`} title="Revive"><RotateCcw size={18} /></button>
+                          : <button onClick={() => remove(t)} className="p-2.5 rounded-xl bg-red-500/10 text-red-300 hover:bg-red-500 hover:text-white" aria-label={`Remove ${fullName(t)}`} title="Remove"><Trash2 size={18} /></button>}
+                      </td>
+                    )}
+                  </motion.tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-4 pb-4"><Pagination {...pager} label="trainees" /></div>
         </div>
       )}
     </div>

@@ -24,56 +24,52 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../context/AuthContext'
 import { Link } from 'react-router-dom'
+import VerifyEmailCard from '../../components/VerifyEmailCard'
+import { useFaculties } from '@shared/lib/useCatalog'
+import { asList, parentOf } from '@shared/lib/faculties'
 
 export default function Materials() {
-  const { currentUser, userData: authUserData, resendVerificationLink } = useAuth()
+  const { currentUser, userData: authUserData } = useAuth()
   const [loading, setLoading] = useState(true)
   const [courses, setCourses] = useState([])
   const [expandedUnit, setExpandedUnit] = useState(null)
   const [previewItem, setPreviewItem] = useState(null)
-  const [resending, setResending] = useState(false)
-  const [resendMsg, setResendMsg] = useState('')
-  const [resendError, setResendError] = useState('')
-
-  const handleResendVerification = async () => {
-    setResending(true)
-    setResendError('')
-    setResendMsg('')
-    try {
-      await resendVerificationLink()
-      setResendMsg('Verification link sent successfully! Check your spam folder.')
-    } catch (err) {
-      setResendError('Failed to send verification link. Please try again.')
-    } finally {
-      setResending(false)
-    }
-  }
+  const { faculties } = useFaculties()
+  const [deptFilter, setDeptFilter] = useState('All')
+  const [courseSearch, setCourseSearch] = useState('')
+  const [loadError, setLoadError] = useState('')
 
   useEffect(() => {
-    if (!currentUser || !authUserData?.faculty) {
+    const mine = asList(authUserData?.faculty).slice(0, 30)
+    if (!currentUser || !currentUser.emailVerified || !mine.length) {
       setLoading(false)
       return
     }
-
     setLoading(true)
-    let q;
-    if (Array.isArray(authUserData.faculty)) {
-      if (authUserData.faculty.length > 0) {
-        q = query(collection(db, 'courses'), where('faculties', 'array-contains-any', authUserData.faculty))
-      } else {
-        q = query(collection(db, 'courses'), where('faculties', 'array-contains', 'NONE'))
-      }
-    } else {
-      q = query(collection(db, 'courses'), where('faculties', 'array-contains', authUserData.faculty))
-    }
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setCourses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
-      setLoading(false)
-    })
+    // Courses store their faculty + parent faculty, so querying with the
+    // trainee's own faculties also returns courses of their departments.
+    const q = query(collection(db, 'courses'), where('faculties', 'array-contains-any', mine))
+    return onSnapshot(q,
+      snapshot => { setCourses(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))); setLoadError(''); setLoading(false) },
+      () => { setLoadError('Your materials could not be loaded. Refresh the page, or contact the eNOTA team if this continues.'); setLoading(false) })
+  }, [currentUser, currentUser?.emailVerified, authUserData?.faculty])
 
-    return () => unsubscribe()
-  }, [currentUser, authUserData])
+  // Group courses by department (or faculty) so they are easy to find.
+  const groups = React.useMemo(() => {
+    const q = courseSearch.trim().toLowerCase()
+    const map = new Map()
+    courses
+      .filter(c => !q || `${c.title} ${c.description}`.toLowerCase().includes(q))
+      .forEach(c => {
+        const tags = asList(c.tags || c.faculties || c.faculty)
+        const key = tags.find(t => parentOf(faculties, t)) || tags[0] || 'General'
+        if (!map.has(key)) map.set(key, [])
+        map.get(key).push(c)
+      })
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b))
+  }, [courses, faculties, courseSearch])
 
+  const safeHref = url => (/^https:\/\//i.test(url || '') ? url : null)
 
   const getDrivePreview = (url) => {
     if (!url) return null
@@ -85,7 +81,7 @@ export default function Materials() {
   const getYoutubePreview = (url) => {
     if (!url) return null
     const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)
-    return match ? `https://www.youtube.com/embed/${match[1]}?autoplay=1` : null
+    return match ? `https://www.youtube-nocookie.com/embed/${match[1]}?autoplay=1` : null
   }
 
   if (loading) {
@@ -110,7 +106,7 @@ export default function Materials() {
               <h1 className="text-4xl md:text-6xl font-display font-extrabold mb-6 tracking-tight">
                 Access <span className="text-accent">Learning</span> Vault
               </h1>
-              <p className="text-white/40 text-lg max-w-lg mx-auto mb-10">
+              <p className="text-muted text-lg max-w-lg mx-auto mb-10">
                 You must be logged in to access your faculty's exclusive learning materials and handouts.
               </p>
               
@@ -131,42 +127,21 @@ export default function Materials() {
             </div>
           </div>
         ) : !currentUser.emailVerified ? (
-          <div className="max-w-2xl mx-auto text-center space-y-8 mt-10">
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="glass p-12 rounded-[40px] border border-accent/20">
-              <div className="w-20 h-20 rounded-full bg-accent/10 border border-accent/40 flex items-center justify-center text-accent mb-8 mx-auto">
-                <Mail size={40} />
-              </div>
-              <h1 className="text-4xl font-display font-extrabold mb-4">
-                Verify Your Email
-              </h1>
-              <p className="text-white/60 mb-8 max-w-md mx-auto">
-                You must verify your email address before accessing the materials. Please check your inbox or spam folder.
-              </p>
-              <button 
-                onClick={handleResendVerification}
-                disabled={resending}
-                className="btn-primary py-4 px-10 rounded-2xl text-sm font-bold uppercase tracking-widest w-full sm:w-auto"
-              >
-                {resending ? 'Sending...' : 'Resend Verification Link'}
-              </button>
-              {resendMsg && <p className="text-accent mt-6 text-sm bg-accent/10 p-4 rounded-xl border border-accent/20">{resendMsg}</p>}
-              {resendError && <p className="text-red-400 mt-6 text-sm bg-red-400/10 p-4 rounded-xl border border-red-400/20">{resendError}</p>}
-            </motion.div>
-          </div>
+          <div className="max-w-2xl mx-auto mt-6"><VerifyEmailCard /></div>
         ) : (
           <div className="space-y-12">
             {/* Student Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-white/5 pb-10">
                <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-                  <p className="text-accent text-[10px] font-bold uppercase tracking-[0.3em] mb-3">Student Session Active</p>
+                  <p className="text-accent text-xs font-bold uppercase tracking-[0.3em] mb-3">Student Session Active</p>
                   <h2 className="text-4xl font-display font-bold mb-2">{authUserData?.firstName} {authUserData?.lastName}</h2>
-                  <div className="flex items-center gap-4 text-white/40 text-sm">
+                  <div className="flex items-center gap-4 text-muted text-sm">
                     <span className="flex items-center gap-1.5"><Folder size={14} className="text-accent" /> {Array.isArray(authUserData?.faculty) ? authUserData.faculty.join(', ') : authUserData?.faculty}</span>
                     <span className="w-1.5 h-1.5 rounded-full bg-white/20"></span>
                     <span>{authUserData?.regNumber}</span>
                   </div>
                </motion.div>
-               <div className="flex items-center gap-2 text-[10px] font-bold text-white/40 uppercase tracking-widest bg-white/5 px-4 py-2 rounded-full border border-white/10">
+               <div className="flex items-center gap-2 text-xs font-bold text-muted uppercase tracking-widest bg-white/5 px-4 py-2 rounded-full border border-white/10">
                   <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
                   Logged In
                </div>
@@ -176,12 +151,29 @@ export default function Materials() {
             <div className="grid lg:grid-cols-12 gap-10">
                {/* Course List Sidebar */}
                <div className="lg:col-span-4 space-y-6">
-                  <h3 className="text-sm font-bold uppercase tracking-widest text-white/20">Your Enrolled Courses</h3>
-                  {courses.map(course => (
+                  <h3 className="text-sm font-semibold text-muted">Your courses</h3>
+                  <div className="relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-subtle" size={16} aria-hidden="true" />
+                    <input type="search" aria-label="Search courses" placeholder="Search courses" value={courseSearch}
+                      onChange={e => setCourseSearch(e.target.value)} className="field-input pl-11 py-2.5" />
+                  </div>
+                  {groups.length > 1 && (
+                    <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by department">
+                      {['All', ...groups.map(([k]) => k)].map(k => (
+                        <button key={k} onClick={() => setDeptFilter(k)} aria-pressed={deptFilter === k}
+                          className={`chip text-xs ${deptFilter === k ? 'chip-on' : 'chip-off'}`}>{k === 'All' ? 'All departments' : k}</button>
+                      ))}
+                    </div>
+                  )}
+                  {loadError && <p role="alert" className="text-red-200 bg-red-500/10 border border-red-400/30 rounded-2xl p-4 text-sm">{loadError}</p>}
+                  {groups.filter(([k]) => deptFilter === 'All' || deptFilter === k).map(([dept, list]) => (
+                    <section key={dept} className="space-y-4" aria-label={dept}>
+                      <p className="flex items-center gap-2 text-sm font-semibold text-accent pt-2"><Folder size={15} aria-hidden="true" /> {dept}</p>
+                      {list.map(course => (
                     <div key={course.id} className="glass p-6 rounded-[32px] border border-white/5 space-y-6">
                        <div>
                           <h4 className="text-xl font-bold mb-2">{course.title}</h4>
-                          <p className="text-xs text-white/40 leading-relaxed whitespace-pre-wrap">{course.description}</p>
+                          <p className="text-xs text-muted leading-relaxed whitespace-pre-wrap">{course.description}</p>
                        </div>
                        
                        <div className="space-y-3">
@@ -192,7 +184,7 @@ export default function Materials() {
                                 className={`w-full flex items-center justify-between p-4 rounded-2xl transition-all ${expandedUnit === `${course.id}-${uIdx}` ? 'bg-accent text-background font-bold' : 'bg-white/5 hover:bg-white/10 text-white/80'}`}
                                >
                                   <div className="flex items-center gap-3">
-                                    <span className="text-[10px] opacity-60">U{uIdx+1}</span>
+                                    <span className="text-xs opacity-60">U{uIdx+1}</span>
                                     <span className="text-sm">{unit.title}</span>
                                   </div>
                                   {expandedUnit === `${course.id}-${uIdx}` ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}
@@ -217,7 +209,7 @@ export default function Materials() {
                                            <button 
                                             key={iIdx}
                                             onClick={() => setPreviewItem({ ...item, catLabel: cat.label })}
-                                            className={`w-full text-left p-2.5 rounded-lg text-[11px] font-medium flex items-center justify-between group transition-colors ${previewItem?.id === item.id ? 'text-accent bg-accent/5' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
+                                            className={`w-full text-left p-2.5 rounded-lg text-sm font-medium flex items-center justify-between group transition-colors ${previewItem?.id === item.id ? 'text-accent bg-accent/5' : 'text-muted hover:text-white hover:bg-white/5'}`}
                                            >
                                               <span className="flex items-center gap-2">
                                                  {cat.icon}
@@ -234,12 +226,13 @@ export default function Materials() {
                           ))}
                        </div>
                     </div>
+                      ))}
+                    </section>
                   ))}
-
                   {courses.length === 0 && (
                     <div className="py-20 glass rounded-[40px] border border-white/5 text-center">
-                       <BookOpen size={48} className="mx-auto text-white/10 mb-4" />
-                       <p className="text-white/40 text-sm">No Available materials for {authUserData?.faculty} at the moment.</p>
+                       <BookOpen size={48} className="mx-auto text-subtle mb-4" />
+                       <p className="text-muted text-sm">No materials have been published for {asList(authUserData?.faculty).join(', ')} yet. Check back soon.</p>
                     </div>
                   )}
                </div>
@@ -257,13 +250,13 @@ export default function Materials() {
                       >
                          <div className="p-8 border-b border-white/5 flex items-center justify-between">
                             <div>
-                               <span className="text-[10px] font-bold text-accent uppercase tracking-widest bg-accent/10 px-2 py-1 rounded mb-2 inline-block">
+                               <span className="text-xs font-bold text-accent uppercase tracking-widest bg-accent/10 px-2 py-1 rounded mb-2 inline-block">
                                  {previewItem.catLabel}
                                </span>
                                <h3 className="text-2xl font-bold">{previewItem.title}</h3>
-                               <p className="text-white/40 text-xs mt-1 whitespace-pre-wrap">{previewItem.description}</p>
+                               <p className="text-muted text-xs mt-1 whitespace-pre-wrap">{previewItem.description}</p>
                             </div>
-                            <button onClick={() => setPreviewItem(null)} className="p-3 hover:bg-white/5 rounded-full transition-colors text-white/40">
+                            <button onClick={() => setPreviewItem(null)} aria-label="Close preview" className="p-3 hover:bg-white/5 rounded-full transition-colors text-muted">
                                <X size={24} />
                             </button>
                          </div>
@@ -286,9 +279,11 @@ export default function Materials() {
                               ></iframe>
                             ) : (
                               <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-10">
-                                 <ExternalLink size={48} className="text-white/10 mb-4" />
-                                 <p className="text-white/40 mb-6">This content cannot be previewed directly.</p>
-                                 <a href={previewItem.youtubeLink || previewItem.driveLink} target="_blank" rel="noopener noreferrer" className="btn-primary py-3 px-8 text-xs">Open in New Tab</a>
+                                 <ExternalLink size={48} className="text-subtle mb-4" />
+                                 <p className="text-muted mb-6">This content cannot be previewed directly.</p>
+                                 {safeHref(previewItem.youtubeLink || previewItem.driveLink)
+                                   ? <a href={safeHref(previewItem.youtubeLink || previewItem.driveLink)} target="_blank" rel="noopener noreferrer" className="btn-primary py-3 px-8">Open in a new tab</a>
+                                   : <p className="text-subtle text-sm">No link has been added for this item yet.</p>}
                               </div>
                             )}
                          </div>
@@ -299,7 +294,7 @@ export default function Materials() {
                             <BookOpen size={48} />
                          </div>
                          <h3 className="text-3xl font-display font-bold mb-4">Ready to <span className="text-accent">Learn?</span></h3>
-                         <p className="text-white/40 max-w-sm mx-auto leading-relaxed">
+                         <p className="text-muted max-w-sm mx-auto leading-relaxed">
                            Select a unit and content from the curriculum sidebar to start viewing handouts and assignments.
                          </p>
                       </div>

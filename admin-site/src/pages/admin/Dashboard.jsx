@@ -1,17 +1,21 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Users, GraduationCap, Award, TrendingUp, BarChart3, PieChart as PieChartIcon, ChevronRight, ChevronDown } from 'lucide-react'
-import { collection, query, getDocs, where, onSnapshot } from 'firebase/firestore'
+import { collection, query, getDocs, where, onSnapshot, getCountFromServer, doc, setDoc } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../context/AuthContext'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
+import { ClaimSuperAdminCard } from '../../components/ProtectedRoute'
+import { TableSkeleton } from '../../components/ui'
+import { Clock } from 'lucide-react'
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line
 } from 'recharts'
 
 export default function Dashboard() {
-  const { userData, isMaster } = useAuth()
+  const { userData, isMaster, superAdminClaimed } = useAuth()
+  const [pendingAdmins, setPendingAdmins] = useState(0)
   const navigate = useNavigate()
   const [rawMarks, setRawMarks] = useState([])
   const [faculties, setFaculties] = useState([])
@@ -25,6 +29,35 @@ export default function Dashboard() {
 
   // Master Admin or Admin with multiple faculties can select 'All' or a specific faculty
   const [selectedFacultyFilter, setSelectedFacultyFilter] = useState('All')
+
+  // Super Admin: pending applications + refresh public homepage statistics.
+  useEffect(() => {
+    if (!isMaster) return
+    const unsub = onSnapshot(query(collection(db, 'users'), where('status', '==', 'pending')),
+      snap => setPendingAdmins(snap.docs.filter(d => d.data().role === 'admin').length), () => {})
+    ;(async () => {
+      try {
+        const [trainees, courses, faculties, records] = await Promise.all([
+          getCountFromServer(query(collection(db, 'users'), where('role', '==', 'student'))),
+          getCountFromServer(collection(db, 'courses')),
+          getCountFromServer(collection(db, 'faculties')),
+          getDocs(collection(db, 'marks')),
+        ])
+        const regs = new Set(records.docs.map(d => (d.data().regNumber || '').toUpperCase()).filter(Boolean))
+        const passed = records.docs.filter(d => parseFloat(d.data().averageMarks) >= 50).length
+        await setDoc(doc(db, 'stats', 'public'), {
+          trainees: Math.max(trainees.data().count, regs.size),
+          courses: courses.data().count,
+          faculties: faculties.data().count,
+          passRate: records.size ? Math.round((passed / records.size) * 100) : 0,
+          updatedAt: new Date().toISOString(),
+        })
+      } catch (err) {
+        console.warn('Could not refresh public stats', err)
+      }
+    })()
+    return unsub
+  }, [isMaster])
 
   useEffect(() => {
     // Fetch dynamic faculties list
@@ -142,14 +175,22 @@ export default function Dashboard() {
     { label: 'Active Faculty', value: stats.topFaculty, icon: <TrendingUp className="text-secondary" />, truncate: true },
   ]
 
-  if (loading) return <div className="p-20 text-center text-white/50 animate-pulse tracking-widest font-bold">Loading Analytics...</div>
+  if (loading) return <TableSkeleton rows={5} />
 
   return (
     <div className="space-y-10">
+      {!superAdminClaimed && <ClaimSuperAdminCard compact />}
+      {isMaster && pendingAdmins > 0 && (
+        <Link to="/admins" className="card p-5 flex items-center gap-4 border-amber-400/30 hover:border-amber-400/60 transition-colors">
+          <Clock className="text-amber-300" size={24} aria-hidden="true" />
+          <p className="flex-1"><span className="font-semibold">{pendingAdmins} admin application{pendingAdmins > 1 ? 's' : ''}</span> waiting for your approval.</p>
+          <span className="btn-outline py-2">Review</span>
+        </Link>
+      )}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h1 className="text-3xl font-display font-bold">Welcome Back, {userData?.firstName}</h1>
-          <p className="text-white/40 text-sm mt-1">Here's a summary of class performances today.</p>
+          <p className="text-muted text-sm mt-1">Here's a summary of class performances today.</p>
         </div>
         <div className="flex items-center gap-4 flex-wrap">
           {(isMaster || adminFaculties.length > 1) && (
@@ -188,9 +229,9 @@ export default function Dashboard() {
                 {card.icon}
               </div>
             </div>
-            <p className="text-white/40 text-xs uppercase tracking-widest font-bold mb-1">{card.label}</p>
+            <p className="text-muted text-xs uppercase tracking-widest font-bold mb-1">{card.label}</p>
             <h3 className={`text-2xl font-bold ${card.truncate ? 'truncate max-w-[150px]' : ''}`}>{card.value}</h3>
-            <p className="text-[10px] text-accent/60 mt-4 font-medium">{card.trend}</p>
+            <p className="text-xs text-accent/60 mt-4 font-medium">{card.trend}</p>
           </motion.div>
         ))}
       </div>
@@ -208,7 +249,7 @@ export default function Dashboard() {
               <h4 className="text-lg font-bold flex items-center gap-2">
                 <BarChart3 className="text-accent" size={20} /> Course Performance
               </h4>
-              <p className="text-white/40 text-xs mt-1">Average marks across active modules</p>
+              <p className="text-muted text-xs mt-1">Average marks across active modules</p>
             </div>
           </div>
           <div className="flex-grow">
@@ -219,9 +260,9 @@ export default function Dashboard() {
                 <YAxis stroke="#ffffff40" fontSize={12} tickLine={false} axisLine={false} domain={[0, 100]} />
                 <Tooltip 
                   cursor={{ fill: '#ffffff05' }}
-                  contentStyle={{ backgroundColor: '#112220', border: '1px solid #ffffff10', borderRadius: '12px' }}
+                  contentStyle={{ backgroundColor: '#0D1D19', border: '1px solid #ffffff10', borderRadius: '12px' }}
                 />
-                <Bar dataKey="value" fill="#285A48" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="value" fill="#17815D" radius={[8, 8, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -239,7 +280,7 @@ export default function Dashboard() {
               <h4 className="text-lg font-bold flex items-center gap-2">
                 <PieChartIcon className="text-accent" size={20} /> Gender Performance
               </h4>
-              <p className="text-white/40 text-xs mt-1">Comparing Male vs Female average marks</p>
+              <p className="text-muted text-xs mt-1">Comparing Male vs Female average marks</p>
             </div>
           </div>
           <div className="flex-grow">
@@ -250,9 +291,9 @@ export default function Dashboard() {
                 <YAxis dataKey="name" type="category" stroke="#ffffff40" fontSize={12} tickLine={false} axisLine={false} />
                 <Tooltip 
                   cursor={{ fill: '#ffffff05' }}
-                  contentStyle={{ backgroundColor: '#112220', border: '1px solid #ffffff10', borderRadius: '12px' }}
+                  contentStyle={{ backgroundColor: '#0D1D19', border: '1px solid #ffffff10', borderRadius: '12px' }}
                 />
-                <Bar dataKey="value" fill="#B0E4CC" radius={[0, 8, 8, 0]} barSize={40} />
+                <Bar dataKey="value" fill="#93E2BA" radius={[0, 8, 8, 0]} barSize={40} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -263,7 +304,7 @@ export default function Dashboard() {
       <div className="glass p-8 rounded-[40px] border border-white/5 text-left">
          <div className="flex items-center justify-between mb-6">
             <h4 className="text-lg font-bold">Faculty Analytics Comparison</h4>
-            {!isMaster && <span className="text-[10px] bg-white/5 px-2 py-1 rounded text-white/40 uppercase tracking-widest">My Faculty Only</span>}
+            {!isMaster && <span className="text-xs bg-white/5 px-2 py-1 rounded text-muted uppercase tracking-widest">My Faculty Only</span>}
          </div>
          <div className="space-y-4">
             {(isMaster ? faculties : adminFaculties).map((faculty, i) => {
@@ -281,7 +322,7 @@ export default function Dashboard() {
                       </div>
                       <div className="text-left">
                         <h5 className="font-bold text-sm text-left">{faculty}</h5>
-                        <p className="text-[10px] text-white/40 uppercase tracking-widest">Performance Insights</p>
+                        <p className="text-xs text-muted uppercase tracking-widest">Performance Insights</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
@@ -291,7 +332,7 @@ export default function Dashboard() {
                        <motion.div
                         animate={{ rotate: expandedFaculty === faculty ? 90 : 0 }}
                        >
-                         <ChevronRight size={18} className="text-white/20" />
+                         <ChevronRight size={18} className="text-subtle" />
                        </motion.div>
                     </div>
                   </div>
@@ -306,15 +347,15 @@ export default function Dashboard() {
                       >
                         <div className="p-6 bg-white/[0.02] border border-white/5 rounded-2xl mx-2 mb-4 grid sm:grid-cols-3 gap-6">
                            <div className="space-y-1">
-                              <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Average Mark</p>
+                              <p className="text-xs font-bold text-subtle uppercase tracking-widest">Average Mark</p>
                               <p className="text-xl font-bold text-accent">{fStats.avg}</p>
                            </div>
                            <div className="space-y-1">
-                              <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Total Trainees</p>
+                              <p className="text-xs font-bold text-subtle uppercase tracking-widest">Total Trainees</p>
                               <p className="text-xl font-bold text-white">{fStats.count}</p>
                            </div>
                            <div className="space-y-1">
-                              <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Pass Rate</p>
+                              <p className="text-xs font-bold text-subtle uppercase tracking-widest">Pass Rate</p>
                               <p className="text-xl font-bold text-secondary">{fStats.pass}</p>
                            </div>
                         </div>

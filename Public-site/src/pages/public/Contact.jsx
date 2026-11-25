@@ -43,7 +43,7 @@ export default function Contact() {
         <div className="grid lg:grid-cols-2 gap-20 items-stretch">
           <motion.div {...fadeInUp} className="flex flex-col h-full bg-surface border border-white/5 rounded-[40px] p-10 lg:p-16">
             <h1 className="text-4xl md:text-6xl font-display font-extrabold mb-8 tracking-tighter">Get In <span className="text-accent">Touch</span></h1>
-            <p className="text-lg text-white/50 mb-12 max-w-sm">Have any questions about the eNOTA system? Send us a message and we'll get back to you shortly.</p>
+            <p className="text-lg text-muted mb-12 max-w-sm">Have any questions about the eNOTA system? Send us a message and we'll get back to you shortly.</p>
 
             <div className="space-y-10 flex-grow">
               <div className="flex items-start gap-4">
@@ -52,7 +52,7 @@ export default function Contact() {
                 </div>
                 <div>
                   <h4 className="font-bold text-white/80 mb-1">Email Us</h4>
-                  <p className="text-sm text-white/40">inkhub250@gmail.com</p>
+                  <p className="text-sm text-muted">inkhub250@gmail.com</p>
                 </div>
               </div>
               <div className="flex items-start gap-4">
@@ -61,7 +61,7 @@ export default function Contact() {
                 </div>
                 <div>
                   <h4 className="font-bold text-white/80 mb-1">WhatsApp</h4>
-                  <p className="text-sm text-white/40">+250786487234</p>
+                  <p className="text-sm text-muted">+250786487234</p>
                 </div>
               </div>
               <div className="flex items-start gap-4">
@@ -70,7 +70,7 @@ export default function Contact() {
                 </div>
                 <div>
                   <h4 className="font-bold text-white/80 mb-1">Location</h4>
-                  <p className="text-sm text-white/40">Kigali, Rwanda</p>
+                  <p className="text-sm text-muted">Kigali, Rwanda</p>
                 </div>
               </div>
             </div>
@@ -86,7 +86,7 @@ export default function Contact() {
             <form onSubmit={handleSubmit} className="space-y-8">
               <div className="grid sm:grid-cols-2 gap-8">
                 <div className="space-y-2">
-                  <label className="text-xs uppercase tracking-widest font-bold text-white/40 ml-1">First Name</label>
+                  <label className="text-xs uppercase tracking-widest font-bold text-muted ml-1">First Name</label>
                   <input 
                     type="text" 
                     required
@@ -97,7 +97,7 @@ export default function Contact() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs uppercase tracking-widest font-bold text-white/40 ml-1">Last Name</label>
+                  <label className="text-xs uppercase tracking-widest font-bold text-muted ml-1">Last Name</label>
                   <input 
                     type="text" 
                     required
@@ -111,7 +111,7 @@ export default function Contact() {
 
               <div className="grid sm:grid-cols-2 gap-8">
                 <div className="space-y-2">
-                  <label className="text-xs uppercase tracking-widest font-bold text-white/40 ml-1">Email</label>
+                  <label className="text-xs uppercase tracking-widest font-bold text-muted ml-1">Email</label>
                   <input 
                     type="email" 
                     required
@@ -122,7 +122,7 @@ export default function Contact() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs uppercase tracking-widest font-bold text-white/40 ml-1">Reg Number</label>
+                  <label className="text-xs uppercase tracking-widest font-bold text-muted ml-1">Reg Number</label>
                   <input 
                     type="text" 
                     required
@@ -135,7 +135,7 @@ export default function Contact() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs uppercase tracking-widest font-bold text-white/40 ml-1">Message/Comment</label>
+                <label className="text-xs uppercase tracking-widest font-bold text-muted ml-1">Message/Comment</label>
                 <textarea 
                   rows="5"
                   required

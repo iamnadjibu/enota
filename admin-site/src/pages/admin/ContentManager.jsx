@@ -4,9 +4,11 @@ import { Settings, Building2, GraduationCap, Edit, Trash2, Plus, Save, AlertCirc
 import { db } from '../../firebase'
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
 import { useAuth } from '../../context/AuthContext'
+import { useToast } from '@shared/ui/feedback'
 
 export default function ContentManager() {
   const { isMaster } = useAuth()
+  const toast = useToast()
   const [config, setConfig] = useState({
     institutions: ['NAD CLASS', 'KSP RWANDA', 'NAD PRODUCTION'],
     faculties: [
@@ -18,7 +20,7 @@ export default function ContentManager() {
     ],
     headerTitle: 'eNOTA PORTAL',
     portalName: 'eNOTA PORTAL',
-    logoUrl: '/apple-touch-icon.png',
+    logoUrl: '',
     footerText: 'Designed by NAD PRODUCTION to facilitate Trainees in Filmmaking and Video Production, COLOR GRADING, AI FILMMAKING, VIBE CODING, and Others. Primarily from NAD CLASS and KSP RWANDA.'
   })
   const [loading, setLoading] = useState(true)
@@ -46,21 +48,24 @@ export default function ContentManager() {
   }, [isMaster])
 
   const handleSave = async () => {
+    if (config.logoUrl && !/^(\/|https:\/\/)/.test(config.logoUrl)) {
+      return toast.error('The logo URL must start with / or https://')
+    }
     try {
       await setDoc(doc(db, 'settings', 'site_config'), config)
-      alert('Config updated!')
+      toast.success('Site content saved.')
     } catch (err) {
-      console.error(err)
+      toast.fail(err, 'Could not save the site content.')
     }
   }
 
-  if (!isMaster) return <div className="p-10 text-center text-white/40">Only Master Admin can access this page.</div>
+  if (!isMaster) return <div className="p-10 text-center text-muted">Only Master Admin can access this page.</div>
 
   return (
     <div className="space-y-10">
       <div>
         <h1 className="text-3xl font-display font-bold">Site <span className="text-accent">Content</span></h1>
-        <p className="text-white/40 text-sm mt-1">Manage global settings, institutions, and faculties.</p>
+        <p className="text-muted text-sm mt-1">Manage global settings, institutions, and faculties.</p>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-10">
@@ -70,7 +75,7 @@ export default function ContentManager() {
            
            <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Portal Name</label>
+                <label className="text-xs font-semibold text-muted ml-1">Portal Name</label>
                 <input 
                   type="text" 
                   value={config.portalName}
@@ -79,7 +84,7 @@ export default function ContentManager() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Logo URL (Direct Link)</label>
+                <label className="text-xs font-semibold text-muted ml-1">Logo URL (Direct Link)</label>
                 <input 
                   type="text" 
                   value={config.logoUrl}
@@ -88,7 +93,7 @@ export default function ContentManager() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Header Display Title</label>
+                <label className="text-xs font-semibold text-muted ml-1">Header Display Title</label>
                 <input 
                   type="text" 
                   value={config.headerTitle}
@@ -97,7 +102,7 @@ export default function ContentManager() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Footer Description</label>
+                <label className="text-xs font-semibold text-muted ml-1">Footer Description</label>
                 <textarea 
                   rows="4"
                   value={config.footerText}

@@ -6,25 +6,31 @@ import Marks from './pages/public/Marks'
 import Materials from './pages/public/Materials'
 import Register from './pages/public/Register'
 import Login from './pages/public/Login'
+import Account from './pages/public/Account'
+import NotFound from './pages/public/NotFound'
 import { AuthProvider } from './context/AuthContext'
 import { BrandingProvider } from './context/BrandingContext'
+import { ToastProvider } from '@shared/ui/feedback'
 
 function App() {
   return (
-    <AuthProvider>
-      <BrandingProvider>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/contact" element={<Contact />} />
-          <Route path="/marks" element={<Marks />} />
-          <Route path="/materials" element={<Materials />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="*" element={<Home />} />
-        </Routes>
-      </BrandingProvider>
-    </AuthProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <BrandingProvider>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/marks" element={<Marks />} />
+            <Route path="/materials" element={<Materials />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/account" element={<Account />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrandingProvider>
+      </AuthProvider>
+    </ToastProvider>
   )
 }
 

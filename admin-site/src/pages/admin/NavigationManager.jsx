@@ -3,11 +3,13 @@ import { doc, onSnapshot, setDoc } from 'firebase/firestore'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Link as LinkIcon, Plus, Trash2, GripVertical, Save, Globe } from 'lucide-react'
 import { db } from '../../firebase'
+import { useToast } from '@shared/ui/feedback'
 
 export default function NavigationManager() {
   const [links, setLinks] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const toast = useToast()
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'siteConfig', 'navigation'), (docSnap) => {
@@ -65,30 +67,35 @@ export default function NavigationManager() {
   const handleSave = async () => {
     // Validate
     if (links.some(l => !l.name.trim() || !l.path.trim())) {
-      alert("All links must have a name and a path.")
+      toast.error('Every link needs a name and a path.')
+      return
+    }
+    // Only site paths ("/about") or secure web links are allowed.
+    const bad = links.find(l => !/^\/[\w\-/]*$/.test(l.path.trim()) && !/^https:\/\/[^\s]+$/i.test(l.path.trim()))
+    if (bad) {
+      toast.error(`“${bad.path}” is not allowed. Use a site path like /about or a full https:// link.`)
       return
     }
 
     setSaving(true)
     try {
-      await setDoc(doc(db, 'siteConfig', 'navigation'), { links })
-      alert("Navigation Links saved successfully!")
+      await setDoc(doc(db, 'siteConfig', 'navigation'), { links: links.map(l => ({ name: l.name.trim(), path: l.path.trim() })) })
+      toast.success('Navigation links saved.')
     } catch (e) {
-      console.error(e)
-      alert("Failed to save navigation links.")
+      toast.fail(e, 'Could not save the navigation links.')
     } finally {
       setSaving(false)
     }
   }
 
-  if (loading) return <div className="p-20 text-center animate-pulse text-white/50">Loading Config...</div>
+  if (loading) return <div className="p-20 text-center animate-pulse text-muted">Loading Config...</div>
 
   return (
     <div className="space-y-10 max-w-5xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h1 className="text-3xl font-display font-bold">Navigation <span className="text-accent">Manager</span></h1>
-          <p className="text-white/40 text-sm mt-1">Configure the main top bar links for the Public Site.</p>
+          <p className="text-muted text-sm mt-1">Configure the main top bar links for the Public Site.</p>
         </div>
         <button onClick={handleSave} disabled={saving} className="btn-primary py-3 px-6 flex items-center gap-2">
            <Save size={20} /> {saving ? 'Saving...' : 'Publish Navigation'}
@@ -105,7 +112,7 @@ export default function NavigationManager() {
 
         <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 mb-8 flex items-start gap-4">
            <LinkIcon className="text-accent mt-1" size={20} />
-           <p className="text-sm text-white/60 leading-relaxed">
+           <p className="text-sm text-muted leading-relaxed">
              <strong>Internal Links:</strong> Use paths starting with a forward slash (e.g., <code className="bg-black/40 px-1 py-0.5 rounded text-accent">/marks</code>).<br />
              <strong>External Links:</strong> Use full URLs (e.g., <code className="bg-black/40 px-1 py-0.5 rounded text-accent">https://youtube.com</code>). External links will automatically open in a new tab.<br />
              <strong>Note:</strong> The "HOME" link (/) will be prominently enforced by the layout system if omitted.
@@ -129,7 +136,7 @@ export default function NavigationManager() {
                    
                    <div className="flex-grow grid md:grid-cols-2 gap-4 w-full">
                      <div className="space-y-1">
-                        <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Display Name</label>
+                        <label className="text-xs uppercase font-bold text-muted tracking-widest pl-1">Display Name</label>
                         <input 
                            type="text"
                            placeholder="e.g. HOME"
@@ -139,7 +146,7 @@ export default function NavigationManager() {
                         />
                      </div>
                      <div className="space-y-1">
-                        <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">URL Path</label>
+                        <label className="text-xs uppercase font-bold text-muted tracking-widest pl-1">URL Path</label>
                         <input 
                            type="text"
                            placeholder="e.g. /marks or https://google.com"
@@ -161,7 +168,7 @@ export default function NavigationManager() {
            </AnimatePresence>
 
            {links.length === 0 && (
-              <div className="text-center p-12 text-white/40 border border-white/5 rounded-2xl border-dashed">
+              <div className="text-center p-12 text-muted border border-white/5 rounded-2xl border-dashed">
                  No navigation links configured. Visitors will only see the Home button.
               </div>
            )}

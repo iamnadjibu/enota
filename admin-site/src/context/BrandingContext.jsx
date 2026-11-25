@@ -8,7 +8,7 @@ export function BrandingProvider({ children }) {
   const [branding, setBranding] = useState({
     portalName: 'eNOTA PORTAL',
     headerTitle: 'eNOTA PORTAL',
-    logoUrl: '/apple-touch-icon.png',
+    logoUrl: '',
     footerText: 'Designed by NAD PRODUCTION to facilitate Trainees in Filmmaking, Video Production, COLOR GRADING, AI FILMMAKING, VIBE CODING, and Others.'
   })
   const [loading, setLoading] = useState(true)
@@ -17,7 +17,7 @@ export function BrandingProvider({ children }) {
     const docRef = doc(db, 'settings', 'site_config')
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
-        setBranding(docSnap.data())
+        setBranding(prev => ({ ...prev, ...docSnap.data() }))
       }
       setLoading(false)
     })

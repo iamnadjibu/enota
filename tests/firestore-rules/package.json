@@ -1,0 +1,13 @@
+{
+  "name": "enota-firestore-rules-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "cd ../.. && tests/firestore-rules/node_modules/.bin/firebase emulators:exec --only firestore --project enota-rules-test \"node --test tests/firestore-rules/rules.test.mjs\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "firebase": "^11.10.0",
+    "firebase-tools": "^14.0.0"
+  }
+}
