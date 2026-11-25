@@ -114,16 +114,39 @@ export async function extractMarks(file, { faculty, knownCourses = [], note = ''
   } catch {
     throw new Error('The AI response could not be read. Try again, or try a clearer file.')
   }
-  const students = (data.students || []).map(s => ({
-    firstName: (s.firstName || '').trim(),
-    lastName: (s.lastName || '').trim(),
-    regNumber: (s.regNumber || '').replace(/\s+/g, '').toUpperCase(),
-    gender: /^f/i.test(s.gender || '') ? 'Female' : /^m/i.test(s.gender || '') ? 'Male' : '',
-    marks: Object.fromEntries((s.marks || [])
-      .filter(m => m.course)
-      .map(m => [m.course.trim().toUpperCase(), Math.round(Number(m.score) * 100) / 100])),
-  }))
-  return { students, warnings: data.warnings || [] }
+  const warnings = [...(data.warnings || [])]
+  const students = (data.students || []).map(s => {
+    const firstName = (s.firstName || '').trim()
+    const lastName = (s.lastName || '').trim()
+    const marks = {}
+    for (const m of s.marks || []) {
+      const course = (m.course || '').trim().toUpperCase()
+      if (!course) continue
+      const score = toNumber(m.score)
+      // A missing score must stay empty for the admin to fill in, never become 0.
+      if (score === null) {
+        warnings.push(`${firstName} ${lastName}: no readable score for ${course}, left empty.`.trim())
+        continue
+      }
+      marks[course] = Math.round(score * 100) / 100
+    }
+    return {
+      firstName,
+      lastName,
+      regNumber: (s.regNumber || '').replace(/\s+/g, '').toUpperCase(),
+      gender: /^f/i.test(s.gender || '') ? 'Female' : /^m/i.test(s.gender || '') ? 'Male' : '',
+      marks,
+    }
+  })
+  return { students, warnings }
+}
+
+/** A finite number from an AI value, or null (null, '', 'abs' and NaN are not scores). */
+export function toNumber(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null
+  if (typeof v !== 'string' || !v.trim()) return null
+  const n = Number(v.trim())
+  return Number.isFinite(n) ? n : null
 }
 
 /** Friendlier messages for common AI Logic failures. */

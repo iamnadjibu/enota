@@ -64,7 +64,7 @@ export default function MarksImport() {
   }, [existing])
 
   const pickFile = f => {
-    if (!f) return
+    if (!f || phase === 'extracting') return
     setError('')
     setFile(f)
   }
@@ -79,7 +79,8 @@ export default function MarksImport() {
       if (!students.length) throw new Error('No trainees were found in this file.')
       const allCourses = [...new Set(students.flatMap(s => Object.keys(s.marks)))]
       setCourses(allCourses)
-      setRows(students.map((s, i) => ({ ...s, key: i, include: true, gender: s.gender || 'Male' })))
+      // Gender stays empty when the sheet does not state it; never guess.
+      setRows(students.map((s, i) => ({ ...s, key: i, include: true, gender: s.gender || '' })))
       setWarnings(w)
       setPhase('review')
       toast.success(`Found ${students.length} trainees and ${allCourses.length} courses. Review before saving.`)
@@ -95,18 +96,34 @@ export default function MarksImport() {
   const update = (key, patch) => setRows(rs => rs.map(r => r.key === key ? { ...r, ...patch } : r))
   const setScore = (key, course, value) => setRows(rs => rs.map(r => r.key === key ? { ...r, marks: { ...r.marks, [course]: value } } : r))
   const removeCourse = c => { setCourses(cs => cs.filter(x => x !== c)); setRows(rs => rs.map(r => { const m = { ...r.marks }; delete m[c]; return { ...r, marks: m } })) }
+  // Returns false when the rename was ignored (empty or unchanged name).
+  // Renaming onto an existing course merges the two columns; scores already
+  // in the target column win over the renamed one.
   const renameCourse = (oldName, newName) => {
     const n = newName.trim().toUpperCase()
-    if (!n || n === oldName) return
-    setCourses(cs => cs.map(c => c === oldName ? n : c))
-    setRows(rs => rs.map(r => { const m = { ...r.marks }; if (oldName in m) { m[n] = m[oldName]; delete m[oldName] } return { ...r, marks: m } }))
+    if (!n || n === oldName) return false
+    setCourses(cs => cs.includes(n) ? cs.filter(c => c !== oldName) : cs.map(c => c === oldName ? n : c))
+    setRows(rs => rs.map(r => {
+      const m = { ...r.marks }
+      if (oldName in m) {
+        if (m[n] === undefined || m[n] === '') m[n] = m[oldName]
+        delete m[oldName]
+      }
+      return { ...r, marks: m }
+    }))
+    return true
   }
-  const addRow = () => setRows(rs => [...rs, { key: Date.now(), include: true, firstName: '', lastName: '', regNumber: '', gender: 'Male', marks: {} }])
+  const addRow = () => setRows(rs => [...rs, { key: Date.now(), include: true, firstName: '', lastName: '', regNumber: '', gender: '', marks: {} }])
+
+  // Reg numbers used by more than one ticked row would create duplicate records.
+  const regCounts = new Map()
+  rows.forEach(r => { if (r.include && r.regNumber) regCounts.set(r.regNumber, (regCounts.get(r.regNumber) || 0) + 1) })
 
   const problems = r => {
     const p = []
     if (!r.firstName || !r.lastName) p.push('Name missing')
     if (!r.regNumber) p.push('Reg number missing')
+    else if (regCounts.get(r.regNumber) > 1) p.push('Duplicate reg number')
     const scored = courses.filter(c => r.marks[c] !== undefined && r.marks[c] !== '')
     if (!scored.length) p.push('No scores')
     if (scored.some(c => toScore(r.marks[c]) === null || Number(r.marks[c]) > 100 || Number(r.marks[c]) < 0)) p.push('Score out of range')
@@ -131,30 +148,37 @@ export default function MarksImport() {
     setPhase('deploying')
     const now = new Date().toISOString()
     const scopeList = expandScope(faculties, [faculty])
+    // Count only what has actually been committed, so a failure in a later
+    // batch reports the truth.
+    let created = 0, updated = 0
     try {
-      let created = 0, updated = 0
       for (let i = 0; i < included.length; i += 400) {
         const batch = writeBatch(db)
+        let c = 0, u = 0
         included.slice(i, i + 400).forEach(r => {
           const prev = existingByReg.get(r.regNumber)
           const merged = { ...(prev?.marks || {}) }
-          courses.forEach(c => { if (r.marks[c] !== undefined && r.marks[c] !== '') merged[c] = r.marks[c] })
+          courses.forEach(course => { if (r.marks[course] !== undefined && r.marks[course] !== '') merged[course] = r.marks[course] })
           const data = {
             firstName: r.firstName.trim(), lastName: r.lastName.trim(), regNumber: r.regNumber,
-            gender: r.gender, faculty, faculties: scopeList, institution,
+            gender: r.gender || prev?.gender || '', faculty, faculties: scopeList, institution,
             ...buildMarkRecord({ marks: merged }, Object.keys(merged)),
             updatedAt: now, importedFrom: file?.name || 'AI import',
           }
-          if (prev) { batch.update(doc(db, 'marks', prev.id), data); updated++ }
-          else { batch.set(doc(collection(db, 'marks')), { ...data, createdAt: now }); created++ }
+          if (prev) { batch.update(doc(db, 'marks', prev.id), data); u++ }
+          else { batch.set(doc(collection(db, 'marks')), { ...data, createdAt: now }); c++ }
         })
         await batch.commit()
+        created += c; updated += u
       }
       setResult({ created, updated })
       setPhase('done')
       toast.success(`Saved: ${created} created, ${updated} updated.`, { title: 'Marks deployed' })
     } catch (err) {
-      toast.fail(err, 'The records could not be saved. Nothing was partially lost — try again.')
+      const saved = created + updated
+      toast.fail(err, saved
+        ? `${saved} record(s) were saved before the error. Press Save again: saved trainees are updated, not duplicated.`
+        : 'The records could not be saved. Nothing was changed. Try again.')
       setPhase('review')
     }
   }
@@ -177,7 +201,8 @@ export default function MarksImport() {
                 onDrop={e => { e.preventDefault(); setDragging(false); pickFile(e.dataTransfer.files?.[0]) }}
                 className={`card relative flex flex-col items-center justify-center text-center p-10 min-h-[320px] cursor-pointer border-2 border-dashed transition-all ${dragging ? 'border-accent bg-accent/5 scale-[1.01]' : 'border-white/15 hover:border-accent/50'}`}
               >
-                <input ref={inputRef} type="file" accept={ACCEPTED} className="sr-only" onChange={e => pickFile(e.target.files?.[0])} />
+                <input ref={inputRef} type="file" accept={ACCEPTED} className="sr-only" disabled={phase === 'extracting'}
+                  onChange={e => { pickFile(e.target.files?.[0]); e.target.value = '' }} />
                 {phase === 'extracting' ? (
                   <div className="space-y-6" role="status" aria-live="polite">
                     <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2.4, ease: 'linear' }}
@@ -267,7 +292,7 @@ export default function MarksImport() {
                       {courses.map(c => (
                         <th scope="col" key={c} className="p-3 min-w-[120px]">
                           <div className="flex items-center gap-1">
-                            <input aria-label={`Rename course ${c}`} defaultValue={c} onBlur={e => renameCourse(c, e.target.value)}
+                            <input aria-label={`Rename course ${c}`} defaultValue={c} onBlur={e => { if (!renameCourse(c, e.target.value)) e.target.value = c }}
                               className="bg-transparent border-b border-dashed border-white/20 focus:border-accent outline-none w-full font-semibold text-ink uppercase" />
                             <button onClick={() => removeCourse(c)} aria-label={`Remove course ${c}`} className="p-1 text-subtle hover:text-red-300"><X size={14} /></button>
                           </div>
@@ -295,7 +320,7 @@ export default function MarksImport() {
                           </td>
                           <td className="p-3">
                             <select aria-label="Gender" className={cell} value={r.gender} onChange={e => update(r.key, { gender: e.target.value })}>
-                              <option className="bg-surface">Male</option><option className="bg-surface">Female</option>
+                              <option className="bg-surface" value="">—</option><option className="bg-surface">Male</option><option className="bg-surface">Female</option>
                             </select>
                           </td>
                           {courses.map(c => {
