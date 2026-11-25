@@ -84,14 +84,22 @@ existing courses, marks and profiles are linked to the new parent faculty.
 
 ```bash
 npm run install:all
-# in one terminal: Firestore + Auth emulators (needs Java 17+)
+# in one terminal: Firestore + Auth emulators (needs Java 21)
 npx --prefix tests/firestore-rules firebase emulators:start --only auth,firestore --project enotaportal
 # in another: either site against the emulators
 cd Public-site && VITE_USE_EMULATORS=true npx vite
 cd admin-site  && VITE_USE_EMULATORS=true npx vite
 ```
 
-Run the security-rules tests with `npm run test:rules`.
+Run the security-rules tests (needs Java 21; works on Windows, macOS and Linux):
+
+```bash
+npm ci --prefix tests/firestore-rules   # once; install:all does not include it
+npm run test:rules
+```
+
+Keep the project on an internal drive. On a FAT32/exFAT USB drive `npm ci`
+can take hours and fail with `ENOTEMPTY`.
 
 ## 7. Build
 
